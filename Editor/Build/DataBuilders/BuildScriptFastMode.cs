@@ -139,7 +139,7 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
                 {
                     GatherAssetsForFolder(entry, aaContext);   
                 }
-                else
+                else if (File.Exists(entry.AssetPath) || Directory.Exists(entry.AssetPath))
                 {
                     FileAttributes file = File.GetAttributes(entry.AssetPath);
                     if (file.HasFlag(FileAttributes.Directory))
@@ -149,6 +149,10 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
                     else
                         entry.CreateCatalogEntries(aaContext.locations, false, typeof(AssetDatabaseProvider).FullName,
                             null, null, aaContext.providerTypes);
+                }
+                else
+                {
+                    UnityEngine.Debug.LogError("File not found: " + entry.AssetPath);
                 }
 
                 index++;
