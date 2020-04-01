@@ -24,7 +24,7 @@ namespace UnityEditor.AddressableAssets.Settings
     /// <summary>
     /// Contains editor data for the addressables system.
     /// </summary>
-    public class AddressableAssetSettings : ScriptableObject
+    public partial class AddressableAssetSettings : ScriptableObject
     {
         [InitializeOnLoadMethod]
         static void RegisterWithAssetPostProcessor()

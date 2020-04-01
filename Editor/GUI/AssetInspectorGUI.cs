@@ -24,12 +24,13 @@ namespace UnityEditor.AddressableAssets.GUI
 
         static void SetAaEntry(AddressableAssetSettings aaSettings, Object[] targets, bool create)
         {
-
+            /*
             if (create && aaSettings.DefaultGroup.ReadOnly)
             {
                 Debug.LogError("Current default group is ReadOnly.  Cannot add addressable assets to it");
                 return;
             }
+            */
             
             Undo.RecordObject(aaSettings, "AddressableAssetSettings");
             string path;
@@ -45,11 +46,18 @@ namespace UnityEditor.AddressableAssets.GUI
                     {
                         if (create)
                         {
+                            var ruleSet = aaSettings.assetRegisterRuleSet;
+                            if (!ruleSet.TryResolveRule(path, out var rule))
+                                rule = new AddressableAssetRegisterRuleSet.Rule { AssetGroup = aaSettings.DefaultGroup };
+                            var assetGroup = rule.AssetGroup;
+
                             if (AddressableAssetUtility.IsInResources(path))
-                                AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, aaSettings.DefaultGroup, new List<string> { path });
+                                AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, assetGroup, new List<string> { path });
                             else
                             {
-                                var e = aaSettings.CreateOrMoveEntry(guid, aaSettings.DefaultGroup, false, false);
+                                var e = aaSettings.CreateOrMoveEntry(guid, assetGroup, false, false);
+                                if (rule.SimplifyAddress)
+                                    e.SetAddress(System.IO.Path.GetFileNameWithoutExtension(e.address), false);
                                 entriesAdded.Add(e);
                                 modifiedGroups.Add(e.parentGroup);
                             }
