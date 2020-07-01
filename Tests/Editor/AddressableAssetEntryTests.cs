@@ -3,19 +3,23 @@ using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor.AddressableAssets.Settings;
+using UnityEditor.AddressableAssets.Settings.GroupSchemas;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.AddressableAssets.ResourceLocators;
+using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.SceneManagement;
+using UnityEngine.U2D;
 
 namespace UnityEditor.AddressableAssets.Tests
 {
     public class AddressableAssetEntryTests : AddressableAssetTestBase
     {
         string guid;
+        AddressableAssetGroup testGroup;
         protected override void OnInit()
         {
-            var path = k_TestConfigFolder + "/subObjectTest.asset";
+            var path = GetAssetPath("subObjectTest.asset");
             AssetDatabase.CreateAsset(UnityEngine.AddressableAssets.Tests.TestObject.Create("test"), path);
 
             AssetDatabase.AddObjectToAsset(UnityEngine.AddressableAssets.Tests.TestObject2.Create("test2"), path);
@@ -28,6 +32,13 @@ namespace UnityEditor.AddressableAssets.Tests
             Settings.CreateOrMoveEntry(guid, Settings.DefaultGroup);
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+
+            testGroup = Settings.CreateGroup("testGroup", false, false, false, null, typeof(BundledAssetGroupSchema));
+        }
+
+        protected override void OnCleanup()
+        {
+            Settings.RemoveGroup(testGroup);
         }
 
         [Test]
@@ -44,7 +55,7 @@ namespace UnityEditor.AddressableAssets.Tests
         public void WhenClassReferencedByAddressableAssetEntryIsReloaded_CachedMainAssetTypeIsReset()
         {
             // Setup
-            var path = k_TestConfigFolder + "/resetCachedMainAssetTypeTestGroup.asset";
+            var path = GetAssetPath("resetCachedMainAssetTypeTestGroup.asset");
             AddressableAssetGroup group = ScriptableObject.CreateInstance<AddressableAssetGroup>();
             AddressableAssetEntry entry = new AddressableAssetEntry(guid, "address", null, false);
             group.AddAssetEntry(entry);
@@ -74,17 +85,18 @@ namespace UnityEditor.AddressableAssets.Tests
             {
                 new EditorBuildSettingsScene(scenePath, true)
             };
-            AddressableAssetEntry entry = new AddressableAssetEntry(AddressableAssetEntry.EditorSceneListName, "EditorSceneList", null, false);
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(AddressableAssetEntry.EditorSceneListName, testGroup, false);
 
             //Test
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            entry.GatherAllAssetReferenceDrawableEntries(results);
+            entry.GatherAllAssetReferenceDrawableEntries(results, Settings);
 
             //Assert
             Assert.AreEqual(0, results.Count);
 
             //Cleanup
             BuiltinSceneCache.scenes = savedCache;
+            Settings.RemoveAssetEntry(AddressableAssetEntry.EditorSceneListName, false);
         }
 
         [Test]
@@ -97,24 +109,26 @@ namespace UnityEditor.AddressableAssets.Tests
             {
                 new EditorBuildSettingsScene(scenePath, true)
             };
-            AddressableAssetEntry entry = new AddressableAssetEntry(AddressableAssetEntry.ResourcesName, "Resources", null, false);
+
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(AddressableAssetEntry.ResourcesName, testGroup, false);
 
             //Test
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            entry.GatherAllAssetReferenceDrawableEntries(results);
+            entry.GatherAllAssetReferenceDrawableEntries(results, Settings);
 
             //Assert
             Assert.AreEqual(0, results.Count);
 
             //Cleanup
             BuiltinSceneCache.scenes = savedCache;
+            Settings.RemoveAssetEntry(AddressableAssetEntry.ResourcesName, false);
         }
 
         [Test]
         public void GatherAllAssetReferenceDrawableEntries_ReturnsFolderSubAssets()
         {
             //Setup
-            string testAssetFolder = k_TestConfigFolder + "/TestFolder";
+            string testAssetFolder = GetAssetPath("TestFolder");
             string testAssetSubFolder = Path.Combine(testAssetFolder, "SubFolder");
 
             string mainPrefabPath = Path.Combine(testAssetFolder, "mainFolder.prefab").Replace('\\', '/');
@@ -126,10 +140,12 @@ namespace UnityEditor.AddressableAssets.Tests
             Directory.CreateDirectory(testAssetSubFolder);
             PrefabUtility.SaveAsPrefabAsset(new GameObject("subFolderAsset"), subPrefabPath);
 
-            //Test
-            AddressableAssetEntry entry = new AddressableAssetEntry(AssetDatabase.AssetPathToGUID(testAssetFolder), "Folder", null, false);
+            string guid = AssetDatabase.AssetPathToGUID(testAssetFolder);
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(guid, testGroup, false);
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            entry.GatherAllAssetReferenceDrawableEntries(results);
+
+            //Test
+            entry.GatherAllAssetReferenceDrawableEntries(results, Settings);
 
             //Assert
             Assert.AreEqual(2, results.Count);
@@ -138,13 +154,14 @@ namespace UnityEditor.AddressableAssets.Tests
 
             //Cleanup
             Directory.Delete(testAssetFolder, true);
+            Settings.RemoveAssetEntry(guid, false);
         }
 
         [Test]
         public void GatherAllAssetReferenceDrawableEntries_DoesNotReturnScenesInFolder_IfSceneIsInBuiltInScenes()
         {
             //Setup
-            string testAssetFolder = k_TestConfigFolder + "/TestFolder";
+            string testAssetFolder = GetAssetPath("TestFolder");
             string testAssetSubFolder = Path.Combine(testAssetFolder, "SubFolder");
             Directory.CreateDirectory(testAssetFolder);
             Directory.CreateDirectory(testAssetSubFolder);
@@ -166,10 +183,12 @@ namespace UnityEditor.AddressableAssets.Tests
             PrefabUtility.SaveAsPrefabAsset(new GameObject("subFolderAsset"), subPrefabPath);
             EditorSceneManager.SaveScene(EditorSceneManager.NewScene(NewSceneSetup.EmptyScene), scenePath);
 
-            //Test
-            AddressableAssetEntry entry = new AddressableAssetEntry(AssetDatabase.AssetPathToGUID(testAssetFolder), "Folder", null, false);
+            string guid = AssetDatabase.AssetPathToGUID(testAssetFolder);
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(guid, testGroup, false);
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            entry.GatherAllAssetReferenceDrawableEntries(results);
+
+            //Test
+            entry.GatherAllAssetReferenceDrawableEntries(results, Settings);
 
             //Assert
             Assert.AreEqual(2, results.Count);
@@ -179,43 +198,53 @@ namespace UnityEditor.AddressableAssets.Tests
             //Cleanup
             Directory.Delete(testAssetFolder, true);
             BuiltinSceneCache.scenes = savedCache;
+            Settings.RemoveAssetEntry(guid, false);
         }
 
         [Test]
         public void GatherAllAssetReferenceDrawableEntries_AddsSimpleAssetEntries()
         {
-            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            //Setup
+            string guid = "12345698655";
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(guid, testGroup, false);
             entry.m_cachedAssetPath = "TestPath";
-
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            entry.GatherAllAssetReferenceDrawableEntries(results);
 
+            //Test
+            entry.GatherAllAssetReferenceDrawableEntries(results, Settings);
+
+            //Assert
             Assert.AreEqual(1, results.Count);
             Assert.AreEqual(entry.AssetPath, results[0].AssetPath);
+
+            //Cleanup
+            Settings.RemoveAssetEntry(guid, false);
         }
 
         [Test]
         public void GatherAllAssetReferenceDrawableEntries_AddsAllEntries_FromAddressableAssetEntryCollection()
         {
             //Setup
-            string testAssetFolder = k_TestConfigFolder + "/TestFolder";
+            string testAssetFolder = GetAssetPath("TestFolder");
             string collectionPath = Path.Combine(testAssetFolder, "collection.asset").Replace('\\', '/');
             Directory.CreateDirectory(testAssetFolder);
 
             var collection = ScriptableObject.CreateInstance<AddressableAssetEntryCollection>();
-            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            string guid = "12345698655";
+            AddressableAssetEntry entry = Settings.CreateOrMoveEntry(guid, testGroup, false);
             entry.m_cachedAssetPath = "TestPath";
             collection.Entries.Add(entry);
 
             AssetDatabase.CreateAsset(collection, collectionPath);
 
-            AddressableAssetEntry collectionEntry = new AddressableAssetEntry("", "collection", null, false);
+            string collectionGuid = "CollectionGuid";
+            AddressableAssetEntry collectionEntry = Settings.CreateOrMoveEntry(collectionGuid, testGroup, false);
             collectionEntry.m_cachedMainAssetType = typeof(AddressableAssetEntryCollection);
             collectionEntry.m_cachedAssetPath = collectionPath;
 
             //Test
             List<IReferenceEntryData> results = new List<IReferenceEntryData>();
-            collectionEntry.GatherAllAssetReferenceDrawableEntries(results);
+            collectionEntry.GatherAllAssetReferenceDrawableEntries(results, Settings);
 
             //Assert
             Assert.AreEqual(1, results.Count);
@@ -223,6 +252,56 @@ namespace UnityEditor.AddressableAssets.Tests
 
             //Cleanup
             Directory.Delete(testAssetFolder, true);
+            Settings.RemoveAssetEntry(guid, false);
+            Settings.RemoveAssetEntry(collectionGuid, false);
+        }
+
+        [Test]
+        public void GetRuntimeProviderType_HandlesEmptyProviderString()
+        {
+            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            Type providerType = entry.GetRuntimeProviderType(null, typeof(GameObject));
+            Assert.IsNull(providerType);
+        }
+
+        [Test]
+        public void GetRuntimeProviderType_ReturnsAtlasProviderForSpriteAtlas()
+        {
+            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            Type providerType = entry.GetRuntimeProviderType(typeof(AssetDatabaseProvider).FullName, typeof(SpriteAtlas));
+            Assert.AreEqual(typeof(AtlasSpriteProvider),providerType);
+        }
+
+        [TestCase(typeof(AssetDatabaseProvider))]
+        [TestCase(typeof(JsonAssetProvider))]
+        [TestCase(typeof(BundledAssetProvider))]
+        [TestCase(typeof(AssetBundleProvider))]
+        [TestCase(typeof(TextDataProvider))]
+        public void GetRuntimeProviderType_ReturnsProviderTypeForNonAtlas(Type testProviderType)
+        {
+            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            Type providerType = entry.GetRuntimeProviderType(testProviderType.FullName, typeof(GameObject));
+            Assert.AreEqual(testProviderType, providerType);
+        }
+
+        [Test]
+        public void GetRuntimeProviderType_HandlesInvalidProviderString()
+        {
+            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            Type providerType = entry.GetRuntimeProviderType("NotARealProvider", typeof(GameObject));
+            Assert.IsNull(providerType);
+        }
+
+        [TestCase(typeof(AssetDatabaseProvider))]
+        [TestCase(typeof(JsonAssetProvider))]
+        [TestCase(typeof(BundledAssetProvider))]
+        [TestCase(typeof(AssetBundleProvider))]
+        [TestCase(typeof(TextDataProvider))]
+        public void GetRuntimeProviderType_HandlesNullAssetType(Type testProviderType)
+        {
+            AddressableAssetEntry entry = new AddressableAssetEntry("12345698655", "Entry", null, false);
+            Type providerType = entry.GetRuntimeProviderType(testProviderType.FullName, null);
+            Assert.AreEqual(testProviderType, providerType);
         }
     }
 } 
