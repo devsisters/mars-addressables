@@ -7,7 +7,7 @@ using UnityEngine;
 namespace UnityEditor.AddressableAssets.GUI
 {
     using Object = UnityEngine.Object;
-    
+
     [InitializeOnLoad]
     static class AddressableAssetInspectorGUI
     {
@@ -30,7 +30,7 @@ namespace UnityEditor.AddressableAssets.GUI
                 return;
             }
             */
-            
+
             Undo.RecordObject(aaSettings, "AddressableAssetSettings");
             string path;
             var guid = string.Empty;
@@ -120,8 +120,8 @@ namespace UnityEditor.AddressableAssets.GUI
                 {
                     GUILayout.BeginHorizontal();
                     GUILayout.Label("Profile: " + AddressableAssetSettingsDefaultObject.GetSettings(true).profileSettings.
-                                        GetProfileName(AddressableAssetSettingsDefaultObject.GetSettings(true).activeProfileId));
-                    
+                        GetProfileName(AddressableAssetSettingsDefaultObject.GetSettings(true).activeProfileId));
+
                     GUILayout.FlexibleSpace();
                     if (GUILayout.Button("System Settings", "MiniButton"))
                     {
@@ -147,7 +147,11 @@ namespace UnityEditor.AddressableAssets.GUI
 
                     if (editor.targets.Length == 1 && entry != null)
                     {
-                        entry.address = EditorGUILayout.DelayedTextField(entry.address, GUILayout.ExpandWidth(true));
+                        string newAddress = EditorGUILayout.DelayedTextField(entry.address, GUILayout.ExpandWidth(true));
+                        if (newAddress != entry.address && newAddress.Contains("[") && newAddress.Contains("]"))
+                            Debug.LogErrorFormat("Rename of address '{0}' cannot contain '[ ]'.", entry.address);
+                        else
+                            entry.address = newAddress;
                     }
                     GUILayout.EndHorizontal();
                 }
