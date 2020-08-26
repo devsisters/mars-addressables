@@ -17,6 +17,7 @@ namespace UnityEngine.AddressableAssets
     /// Generic version of AssetReference class.  This should not be used directly as CustomPropertyDrawers do not support generic types.  Instead use the concrete derived classes such as AssetReferenceGameObject.
     /// </summary>
     /// <typeparam name="TObject"></typeparam>
+    [Serializable]
     public class AssetReferenceT<TObject> : AssetReference where TObject : Object
     {
         /// <summary>
@@ -214,6 +215,18 @@ namespace UnityEngine.AddressableAssets
         string m_SubObjectName;
 
         AsyncOperationHandle m_Operation;
+        /// <summary>
+        /// The AsyncOperationHandle currently being used by the AssetReference.
+        /// For example, if you call AssetReference.LoadAssetAsync, this property will return a handle to that operation.
+        /// </summary>
+        public AsyncOperationHandle OperationHandle
+        {
+            get
+            {
+                return m_Operation;
+            }
+        }
+
         /// <summary>
         /// The actual key used to request the asset at runtime. RuntimeKeyIsValid() can be used to determine if this reference was set.
         /// </summary>

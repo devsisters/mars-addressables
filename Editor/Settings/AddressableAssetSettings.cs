@@ -211,10 +211,33 @@ namespace UnityEditor.AddressableAssets.Settings
         [SerializeField]
         bool m_UniqueBundleIds = false;
 
+        [SerializeField]
+        int m_maxConcurrentWebRequests = 500;
+        /// <summary>
+        /// The maximum number of concurrent web requests.  This value will be clamped from 1 to 1024.
+        /// </summary>
+        public int MaxConcurrentWebRequests
+        {
+            get { return m_maxConcurrentWebRequests; }
+            set { m_maxConcurrentWebRequests = Mathf.Clamp(value, 1, 1024); }
+        }
+
         public bool UniqueBundleIds
         {
             get { return m_UniqueBundleIds; }
             set { m_UniqueBundleIds = value; }
+        }
+
+        [SerializeField]
+        bool m_ContiguousBundles = false;
+
+        /// <summary>
+        /// If set, packs assets in bundles contiguously based on the ordering of the source asset which results in improved asset loading times. Disable this if you've built bundles with a version of Addressables older than 1.12.1 and you want to minimize bundle changes.
+        /// </summary>
+        public bool ContiguousBundles
+        {
+            get { return m_ContiguousBundles; }
+            set { m_ContiguousBundles = value; }
         }
 
         /// <summary>
@@ -976,6 +999,8 @@ namespace UnityEditor.AddressableAssets.Settings
                 aa.m_IsTemporary = !isPersisted;
                 aa.activeProfileId = aa.profileSettings.Reset();
                 aa.name = configName;
+                // TODO: Uncomment after initial opt-in testing period
+                //aa.ContiguousBundles = true;
 
                 if (isPersisted)
                 {
@@ -1245,6 +1270,27 @@ namespace UnityEditor.AddressableAssets.Settings
                 }
             }
             return null;
+        }
+
+        internal bool IsAssetPathInAddressableDirectory(string assetPath, out string assetName)
+        {
+            if (!string.IsNullOrEmpty(assetPath))
+            {
+                var dir = Path.GetDirectoryName(assetPath);
+                while (!string.IsNullOrEmpty(dir))
+                {
+                    var dirEntry = FindAssetEntry(AssetDatabase.AssetPathToGUID(dir));
+                    if (dirEntry != null)
+                    {
+                        assetName = dirEntry.address + assetPath.Remove(0, dir.Length);
+                        return true;
+                    }
+
+                    dir = Path.GetDirectoryName(dir);
+                }
+            }
+            assetName = "";
+            return false;
         }
 
         internal void MoveAssetsFromResources(Dictionary<string, string> guidToNewPath, AddressableAssetGroup targetParent)
