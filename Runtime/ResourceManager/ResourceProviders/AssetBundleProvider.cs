@@ -100,17 +100,16 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
                 return 0;
             var locHash = Hash128.Parse(Hash);
 #if ENABLE_CACHING
-            var bundleName = Path.GetFileNameWithoutExtension(id);
             if (locHash.isValid) //If we have a hash, ensure that our desired version is cached.
             {
-                if (Caching.IsVersionCached(new CachedAssetBundle(bundleName, locHash)))
+                if (Caching.IsVersionCached(new CachedAssetBundle(BundleName, locHash)))
                     return 0;
                 return BundleSize;
             }
             else //If we don't have a hash, any cached version will do.
             {
                 List<Hash128> versions = new List<Hash128>();
-                Caching.GetCachedVersions(bundleName, versions);
+                Caching.GetCachedVersions(BundleName, versions);
                 if (versions.Count > 0)
                     return 0;
             }
@@ -128,6 +127,7 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
         internal ProvideHandle m_ProvideHandle;
         internal AssetBundleRequestOptions m_Options;
         int m_Retries;
+        long m_BytesToDownload;
 
         internal UnityWebRequest CreateWebRequest(IResourceLocation loc)
         {
@@ -167,6 +167,21 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
 
         float PercentComplete() { return m_RequestOperation != null ? m_RequestOperation.progress : 0.0f; }
 
+        DownloadStatus GetDownloadStatus()
+        {
+            if (m_Options == null)
+                return default;
+            var status = new DownloadStatus() { TotalBytes = m_BytesToDownload, IsDone = PercentComplete() >= 1f };
+            if (m_BytesToDownload > 0)
+            {
+                if (m_WebRequestQueueOperation != null)
+                    status.DownloadedBytes = (long)(m_WebRequestQueueOperation.m_WebRequest.downloadedBytes);
+                else if (PercentComplete() >= 1.0f)
+                    status.DownloadedBytes = status.TotalBytes;
+            }
+            return status;
+        }
+
         /// <summary>
         /// Get the asset bundle object managed by this resource.  This call may force the bundle to load if not already loaded.
         /// </summary>
@@ -187,17 +202,20 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
             m_Retries = 0;
             m_AssetBundle = null;
             m_downloadHandler = null;
+            m_RequestOperation = null;
             m_ProvideHandle = provideHandle;
             m_Options = m_ProvideHandle.Location.Data as AssetBundleRequestOptions;
-            m_RequestOperation = null;
+            if (m_Options != null)
+                m_BytesToDownload = m_Options.ComputeSize(m_ProvideHandle.Location, m_ProvideHandle.ResourceManager);
             provideHandle.SetProgressCallback(PercentComplete);
+            provideHandle.SetDownloadProgressCallbacks(GetDownloadStatus);
             BeginOperation();
         }
 
         private void BeginOperation()
         {
             string path = m_ProvideHandle.ResourceManager.TransformInternalId(m_ProvideHandle.Location);
-            if (File.Exists(path))
+            if (File.Exists(path) || (Application.platform == RuntimePlatform.Android && path.StartsWith("jar:")))
             {
                 m_RequestOperation = AssetBundle.LoadFromFileAsync(path, m_Options == null ? 0 : m_Options.Crc);
                 m_RequestOperation.completed += LocalRequestOperationCompleted;
