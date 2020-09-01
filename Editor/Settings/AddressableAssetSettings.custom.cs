@@ -6,6 +6,6 @@ namespace UnityEditor.AddressableAssets.Settings
 {
     public partial class AddressableAssetSettings
     {
-        public AddressableAssetRegisterRuleSet assetRegisterRuleSet;
+        public AddressablesHook hook;
     }
 }

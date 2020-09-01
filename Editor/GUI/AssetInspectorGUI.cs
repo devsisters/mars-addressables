@@ -45,18 +45,16 @@ namespace UnityEditor.AddressableAssets.GUI
                     {
                         if (create)
                         {
-                            var ruleSet = aaSettings.assetRegisterRuleSet;
-                            if (!ruleSet.TryResolveRule(path, out var rule))
-                                rule = new AddressableAssetRegisterRuleSet.Rule { AssetGroup = aaSettings.DefaultGroup };
-                            var assetGroup = rule.AssetGroup;
+                            var hook = aaSettings.hook;
+                            if (hook.BeforeSetEntryOnInspectorGUI(path, out var assetGroup, out var customAddress) == false)
+                                assetGroup = aaSettings.DefaultGroup;
 
                             if (AddressableAssetUtility.IsInResources(path))
                                 AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, assetGroup, new List<string> { path });
                             else
                             {
                                 var e = aaSettings.CreateOrMoveEntry(guid, assetGroup, false, false);
-                                if (rule.SimplifyAddress)
-                                    e.SetAddress(System.IO.Path.GetFileNameWithoutExtension(e.address), false);
+                                if (string.IsNullOrEmpty(customAddress) == false) e.SetAddress(customAddress, false);
                                 entriesAdded.Add(e);
                                 modifiedGroups.Add(e.parentGroup);
                             }
