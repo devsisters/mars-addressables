@@ -46,8 +46,10 @@ namespace UnityEditor.AddressableAssets.GUI
                         if (create)
                         {
                             var hook = aaSettings.hook;
-                            if (hook.BeforeSetEntryOnInspectorGUI(path, out var assetGroup, out var customAddress) == false)
-                                assetGroup = aaSettings.DefaultGroup;
+                            AddressableAssetGroup assetGroup = default;
+                            string customAddress = default;
+                            if (hook != null) hook.BeforeSetEntryOnInspectorGUI(path, out assetGroup, out customAddress);
+                            if (assetGroup == null) assetGroup = aaSettings.DefaultGroup;
 
                             if (AddressableAssetUtility.IsInResources(path))
                                 AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, assetGroup, new List<string> { path });
