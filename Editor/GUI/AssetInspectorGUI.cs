@@ -32,16 +32,13 @@ namespace UnityEditor.AddressableAssets.GUI
             */
 
             Undo.RecordObject(aaSettings, "AddressableAssetSettings");
-            string path;
-            var guid = string.Empty;
             //if (create || EditorUtility.DisplayDialog("Remove Addressable Asset Entries", "Do you want to remove Addressable Asset entries for " + targets.Length + " items?", "Yes", "Cancel"))
             {
                 var entriesAdded = new List<AddressableAssetEntry>();
                 var modifiedGroups = new HashSet<AddressableAssetGroup>();
-                Type mainAssetType;
                 foreach (var t in targets)
                 {
-                    if (AddressableAssetUtility.GetPathAndGUIDFromTarget(t, out path, ref guid, out mainAssetType))
+                    if (AddressableAssetUtility.GetPathAndGUIDFromTarget(t, out var path, out var guid, out var mainAssetType))
                     {
                         if (create)
                         {
@@ -52,7 +49,9 @@ namespace UnityEditor.AddressableAssets.GUI
                             if (assetGroup == null) assetGroup = aaSettings.DefaultGroup;
 
                             if (AddressableAssetUtility.IsInResources(path))
-                                AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, assetGroup, new List<string> { path });
+                            {
+                                AddressableAssetUtility.SafeMoveResourcesToGroup(aaSettings, assetGroup, new List<string> { path }, new List<string> { guid });
+                            }
                             else
                             {
                                 var e = aaSettings.CreateOrMoveEntry(guid, assetGroup, false, false);
@@ -78,7 +77,6 @@ namespace UnityEditor.AddressableAssets.GUI
         static void OnPostHeaderGUI(Editor editor)
         {
             var aaSettings = AddressableAssetSettingsDefaultObject.Settings;
-            var guid = string.Empty;
             AddressableAssetEntry entry = null;
 
             if (editor.targets.Length > 0)
@@ -88,11 +86,7 @@ namespace UnityEditor.AddressableAssets.GUI
                 bool foundAssetGroup = false;
                 foreach (var t in editor.targets)
                 {
-                    string path;
-                    Type mainAssetType;
-                    if (AddressableAssetUtility.GetPathAndGUIDFromTarget(t, out path, ref guid, out mainAssetType) &&
-                        path.ToLower().Contains("assets") &&
-                        mainAssetType != null)
+                    if (AddressableAssetUtility.GetPathAndGUIDFromTarget(t, out var path, out var guid, out var mainAssetType))
                     {
                         // Is addressable group
                         if (path.ToLower().Contains("addressableassetsdata/assetgroups"))
