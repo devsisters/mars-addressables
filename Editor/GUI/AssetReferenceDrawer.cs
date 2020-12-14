@@ -473,22 +473,10 @@ namespace UnityEditor.AddressableAssets.GUI
             Rect pickerRect = objRect;
             pickerRect.width = pickerWidth;
             pickerRect.x = objRect.xMax - pickerWidth;
-            var objNames = new string[subAssets.Count];
             bool multipleSubassets = false;
-            var selIndex = 0;
 
             // Get currently selected subasset
-            for (int i = 0; i < subAssets.Count; i++)
-            {
-                var subAsset = subAssets[i];
-                var objName = subAsset == null ? "<none>" : subAsset.name;
-                if (objName.EndsWith("(Clone)"))
-                    objName = objName.Replace("(Clone)", "");
-                objNames[i] = objName;
-
-                if (m_AssetRefObject.SubObjectName == objName)
-                    selIndex = i;
-            }
+            GetSelectedSubassetIndex(subAssets, out var selIndex, out var objNames);
 
             // Check if targetObjects have multiple different selected
             if (property.serializedObject.targetObjects.Length > 1)
@@ -524,6 +512,42 @@ namespace UnityEditor.AddressableAssets.GUI
 #endif
             return assetDropDownRect;
         }
+        
+        internal void GetSelectedSubassetIndex(List<Object> subAssets, out int selIndex, out string[] objNames)
+        {
+            objNames = new string[subAssets.Count];
+            selIndex = 0;
+
+            // Get currently selected subasset
+            for (int i = 0; i < subAssets.Count; i++)
+            {
+                var subAsset = subAssets[i];
+                var objName = subAsset == null ? "<none>" : subAsset.name;
+                if (objName.EndsWith("(Clone)"))
+                    objName = objName.Replace("(Clone)", "");
+                objNames[i] = subAsset == null ? objName : $"{objName}:{subAsset.GetType()}";
+
+                if (subAsset == null)
+                {
+                    selIndex = i;
+                }
+                else if (m_AssetRefObject.SubObjectName == objName)
+                {
+                    if (m_AssetRefObject.SubOjbectType != null)
+                    {
+                        if (subAsset.GetType().AssemblyQualifiedName ==
+                            m_AssetRefObject.SubOjbectType.AssemblyQualifiedName)
+                        {
+                            selIndex = i;
+                        }
+                    }
+                    else
+                    {
+                        selIndex = i;
+                    }
+                }
+            }
+        }
 
         private bool CheckTargetObjectsSubassetsAreDifferent(SerializedProperty property, string objName)
         {
@@ -547,7 +571,7 @@ namespace UnityEditor.AddressableAssets.GUI
         {
             bool valueChanged = false;
             string spriteName = null;
-            if (subAsset != null)
+            if (subAsset != null && subAsset.GetType() == typeof(Sprite))
             {
                 spriteName = subAsset.name;
                 if (spriteName.EndsWith("(Clone)"))

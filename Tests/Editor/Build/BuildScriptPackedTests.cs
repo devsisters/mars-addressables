@@ -80,6 +80,23 @@ namespace UnityEditor.AddressableAssets.Tests
         }
 
         [Test]
+        public void WarningIsLogged_WhenAddressableGroupDoesNotContainSchema()
+        {
+            var buildScript = ScriptableObject.CreateInstance<BuildScriptPackedMode>();
+            AddressablesDataBuilderInput input = m_BuilderInput;
+            var group = input.AddressableSettings.CreateGroup("Invalid Group", false, false, false,
+                new List<AddressableAssetGroupSchema>());
+
+            buildScript.BuildData<AddressableAssetBuildResult>(input);
+
+            LogAssert.Expect(LogType.Warning, $"{group.Name} does not have any associated AddressableAssetGroupSchemas. " +
+                                              $"Data from this group will not be included in the build. " +
+                                              $"If this is unexpected the AddressableGroup may have become corrupted.");
+
+            input.AddressableSettings.RemoveGroup(group);
+        }
+
+        [Test]
         public void SetAssetEntriesBundleFileIdToCatalogEntryBundleFileId_ModifiedOnlyAssetEntries_ThatAreIncludedInBuildWriteData()
         {
             GUID entry1Guid = GUID.Generate();
@@ -459,6 +476,7 @@ namespace UnityEditor.AddressableAssets.Tests
             using (new HideResourceFoldersScope())
             {
                 var resourceFolder = k_SchemaTestFolderPath + "/Resources";
+                int builtInPackagesResourceCount = ResourcesTestUtility.GetResourcesEntryCount(m_Settings, true);
                 Directory.CreateDirectory(resourceFolder);
 
                 var group = m_Settings.FindGroup(AddressableAssetSettings.PlayerDataGroupName);
@@ -476,7 +494,7 @@ namespace UnityEditor.AddressableAssets.Tests
 
                 var actualProviders = m_BuildScript.ResourceProviderData
                     .Where(rpd => rpd.ObjectType.ClassName == typeof(LegacyResourcesProvider).FullName).ToList();
-                Assert.AreEqual(0, actualProviders.Count);
+                Assert.AreEqual(builtInPackagesResourceCount > 0 ? 1 : 0, actualProviders.Count);
             }
         }
 
@@ -536,6 +554,48 @@ namespace UnityEditor.AddressableAssets.Tests
                 group.AddAssetEntry(e);
                 entries.Add(e);
             }
+        }
+
+        [Test]
+        public void GenerateBuildInputDefinition_WithInternalIdModes_GeneratesExpectedAddresses()
+        {
+            var group = m_Settings.CreateGroup("DynamicInternalIdGroup", false, false, false, null, typeof(BundledAssetGroupSchema));
+            var entries = new List<AddressableAssetEntry>();
+            AddressableAssetEntry e = new AddressableAssetEntry($"abcde", $"addr0", group, false);
+            e.m_cachedAssetPath = "Assets/DummyPath0.asset";
+            entries.Add(e);
+
+            e = new AddressableAssetEntry($"abcdf", $"addr0", group, false);
+            e.m_cachedAssetPath = "Assets/DummyPath0.asset";
+            entries.Add(e);
+
+            e = new AddressableAssetEntry($"abcdg", $"addr0", group, false);
+            e.m_cachedAssetPath = "Assets/DummyPath0.asset";
+            entries.Add(e);
+
+            e = new AddressableAssetEntry($"axcde", $"addr0", group, false);
+            e.m_cachedAssetPath = "Assets/DummyPath0.asset";
+            entries.Add(e);
+
+            var schema = group.GetSchema<BundledAssetGroupSchema>();
+            schema.InternalIdNamingMode = BundledAssetGroupSchema.AssetNamingMode.FullPath;
+            var bundleBuild = BuildScriptPackedMode.GenerateBuildInputDefinition(entries, "bundle");
+            Assert.AreEqual("Assets/DummyPath0.asset", bundleBuild.addressableNames[0]);
+
+            schema.InternalIdNamingMode = BundledAssetGroupSchema.AssetNamingMode.Filename;
+            bundleBuild = BuildScriptPackedMode.GenerateBuildInputDefinition(entries, "bundle");
+            Assert.AreEqual("DummyPath0.asset", bundleBuild.addressableNames[0]);
+
+            schema.InternalIdNamingMode = BundledAssetGroupSchema.AssetNamingMode.GUID;
+            bundleBuild = BuildScriptPackedMode.GenerateBuildInputDefinition(entries, "bundle");
+            Assert.AreEqual("abcde", bundleBuild.addressableNames[0]);
+
+            schema.InternalIdNamingMode = BundledAssetGroupSchema.AssetNamingMode.Dynamic;
+            bundleBuild = BuildScriptPackedMode.GenerateBuildInputDefinition(entries, "bundle");
+            Assert.AreEqual("a", bundleBuild.addressableNames[0]);
+            Assert.AreEqual("ab", bundleBuild.addressableNames[1]);
+            Assert.AreEqual("abc", bundleBuild.addressableNames[2]);
+            Assert.AreEqual("ax", bundleBuild.addressableNames[3]);
         }
 
         [Test]

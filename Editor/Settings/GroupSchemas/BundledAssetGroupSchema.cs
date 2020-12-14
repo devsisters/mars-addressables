@@ -65,6 +65,79 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
 
         [SerializeField]
         BundleCompressionMode m_Compression = BundleCompressionMode.LZ4;
+        
+        List<Action> m_QueuedChanges = new List<Action>();
+
+        /// <summary>
+        /// Options for internal id of assets in bundles.
+        /// </summary>
+        internal enum AssetNamingMode
+        {
+            /// <summary>
+            /// Use to identify assets by their full path.
+            /// </summary>
+            FullPath,
+            /// <summary>
+            /// Use to identify assets by their filename only.  There is a risk of collisions when assets in different folders have the same filename.
+            /// </summary>
+            Filename,
+            /// <summary>
+            /// Use to identify assets by their asset guid.  This will save space over using the full path and will be stable if assets move in the project.
+            /// </summary>
+            GUID,
+            /// <summary>
+            /// This method attempts to use the smallest identifier for internal asset ids.  For asset bundles with very few items, this can save a significant amount of space in the content catalog.
+            /// </summary>
+            Dynamic
+        }
+
+        [SerializeField]
+        bool m_IncludeAddressInCatalog = true;
+        [SerializeField]
+        bool m_IncludeGUIDInCatalog = true;
+        [SerializeField]
+        bool m_IncludeLabelsInCatalog = true;
+
+        /// <summary>
+        /// If enabled, addresses are included in the content catalog.  This is required if assets are to be loaded via their main address.
+        /// </summary>
+        internal bool IncludeAddressInCatalog
+        {
+            get => m_IncludeAddressInCatalog;
+            set => m_IncludeAddressInCatalog = value;
+        }
+
+        /// <summary>
+        /// If enabled, guids are included in content catalogs.  This is required if assets are to be loaded via AssetReference.
+        /// </summary>
+        internal bool IncludeGUIDInCatalog
+        {
+            get => m_IncludeGUIDInCatalog;
+            set => m_IncludeGUIDInCatalog = value;
+        }
+        
+        /// <summary>
+        /// If enabled, labels are included in the content catalogs.  This is required if labels are used at runtime load load assets.
+        /// </summary>
+        internal bool IncludeLabelsInCatalog
+        {
+            get => m_IncludeLabelsInCatalog;
+            set => m_IncludeLabelsInCatalog = value;
+        }
+
+        /// <summary>
+        /// Internal Id mode for assets in bundles.
+        /// </summary>
+        internal AssetNamingMode InternalIdNamingMode
+        {
+            get { return m_InternalIdNamingMode; }
+            set { m_InternalIdNamingMode = value; }
+        }
+
+        [SerializeField]
+        [Tooltip("Indicates how the internal asset name will be generated.")]
+        AssetNamingMode m_InternalIdNamingMode = AssetNamingMode.FullPath;
+
 
         /// <summary>
         /// Gets the build compression settings for bundles in this group.
@@ -144,6 +217,7 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
         [SerializeField]
         [Tooltip("If true, the CRC (Cyclic Redundancy Check) of the asset bundle is used to check the integrity.  This can be used for both local and remote bundles.")]
         bool m_UseAssetBundleCrc = true;
+
         /// <summary>
         /// If true, the CRC and Hash values of the asset bundle are used to determine if a bundle can be loaded from the local cache instead of downloaded.
         /// </summary>
@@ -298,6 +372,29 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
                 m_BundledAssetProviderType.Value = typeof(BundledAssetProvider);
         }
 
+        internal string GetAssetLoadPath(string assetPath, HashSet<string> otherLoadPaths, Func<string, string> pathToGUIDFunc)
+        {
+            switch (InternalIdNamingMode)
+            {
+                case AssetNamingMode.FullPath: return assetPath;
+                case AssetNamingMode.Filename: return System.IO.Path.GetFileName(assetPath);
+                case AssetNamingMode.GUID: return pathToGUIDFunc(assetPath);
+                case AssetNamingMode.Dynamic:
+                    {
+                        var g = pathToGUIDFunc(assetPath);
+                        if (otherLoadPaths == null)
+                            return g;
+                        var len = 1;
+                        var p = g.Substring(0, len);
+                        while (otherLoadPaths.Contains(p))
+                            p = g.Substring(0, ++len);
+                        otherLoadPaths.Add(p);
+                        return p;
+                    }
+            }
+            return assetPath;
+        }
+
         /// <summary>
         /// Impementation of ISerializationCallbackReceiver, does nothing.
         /// </summary>
@@ -423,7 +520,7 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
         }
 
         GUIContent m_AssetProviderContent = new GUIContent("Asset Provider", "The provider to use for loading assets out of AssetBundles");
-        GUIContent m_BundleProviderContent = new GUIContent("AssetBundle Provider", "The provider to use for loading AssetBundles (not the assets within bundles)");
+        GUIContent m_BundleProviderContent = new GUIContent("Asset Bundle Provider", "The provider to use for loading AssetBundles (not the assets within bundles)");
 
         /// <inheritdoc/>
         public override void OnGUI()
@@ -433,27 +530,31 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
             m_ShowPaths = EditorGUILayout.Foldout(m_ShowPaths, "Build and Load Paths");
             if (m_ShowPaths)
             {
-                EditorGUILayout.PropertyField(so.FindProperty("m_BuildPath"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_LoadPath"), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_BuildPath)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_LoadPath)), true);
             }
 
             m_ShowAdvanced = EditorGUILayout.Foldout(m_ShowAdvanced, "Advanced Options");
             if (m_ShowAdvanced)
             {
-                EditorGUILayout.PropertyField(so.FindProperty("m_Compression"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_IncludeInBuild"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_ForceUniqueProvider"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_UseAssetBundleCache"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_UseAssetBundleCrc"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_UseAssetBundleCrcForCachedBundles"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_Timeout"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_ChunkedTransfer"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_RedirectLimit"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_RetryCount"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_BundleMode"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_BundleNaming"), true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_BundledAssetProviderType"), m_AssetProviderContent, true);
-                EditorGUILayout.PropertyField(so.FindProperty("m_AssetBundleProviderType"), m_BundleProviderContent, true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_Compression)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_IncludeInBuild)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_ForceUniqueProvider)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_UseAssetBundleCache)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_UseAssetBundleCrc)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_UseAssetBundleCrcForCachedBundles)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_Timeout)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_ChunkedTransfer)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_RedirectLimit)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_RetryCount)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_IncludeAddressInCatalog)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_IncludeGUIDInCatalog)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_IncludeLabelsInCatalog)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_BundleMode)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_InternalIdNamingMode)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_BundleNaming)), true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_BundledAssetProviderType)), m_AssetProviderContent, true);
+                EditorGUILayout.PropertyField(so.FindProperty(nameof(m_AssetBundleProviderType)), m_BundleProviderContent, true);
             }
 
             so.ApplyModifiedProperties();
@@ -462,6 +563,7 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
         /// <inheritdoc/>
         public override void OnGUIMultiple(List<AddressableAssetGroupSchema> otherSchemas)
         {
+            m_QueuedChanges.Clear();
             var so = new SerializedObject(this);
             SerializedProperty prop;
 
@@ -483,28 +585,44 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
             if (m_ShowPaths)
             {
                 // BuildPath
-                prop = so.FindProperty("m_BuildPath");
-                ShowMixedValue(prop, otherSchemas, typeof(ProfileValueReference), "m_BuildPath");
+                prop = so.FindProperty(nameof(m_BuildPath));
+                var prevBuildPath = m_BuildPath.Id;
+                ShowMixedValue(prop, otherSchemas, typeof(ProfileValueReference), nameof(m_BuildPath));
 
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(prop, true);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    // Workaround to EditorGUILayout.PropertyField Undo bug
+                    var newBuildPath = m_BuildPath.Id;
+                    m_BuildPath.Id = prevBuildPath;
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaBuildPath" + name);
+                    m_BuildPath.Id = newBuildPath;
                     foreach (var schema in otherBundledSchemas)
-                        schema.m_BuildPath.Id = BuildPath.Id;
+                    {
+                        m_QueuedChanges.Add(() => schema.m_BuildPath.Id = BuildPath.Id);
+                    }
                 }
                 EditorGUI.showMixedValue = false;
 
                 // LoadPath
-                prop = so.FindProperty("m_LoadPath");
-                ShowMixedValue(prop, otherSchemas, typeof(ProfileValueReference), "m_LoadPath");
+                prop = so.FindProperty(nameof(m_LoadPath));
+                var prevLoadPath = m_LoadPath.Id;
+                ShowMixedValue(prop, otherSchemas, typeof(ProfileValueReference), nameof(m_LoadPath));
 
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(prop, true);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    // Workaround to EditorGUILayout.PropertyField Undo bug
+                    var newLoadPath = m_LoadPath.Id;
+                    m_LoadPath.Id = prevLoadPath;
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaLoadPath" + name);
+                    m_LoadPath.Id = newLoadPath;
                     foreach (var schema in otherBundledSchemas)
-                        schema.m_LoadPath.Id = LoadPath.Id;
+                    {
+                        m_QueuedChanges.Add(() => schema.m_LoadPath.Id = LoadPath.Id);
+                    }
                 }
                 EditorGUI.showMixedValue = false;
             }
@@ -521,191 +639,281 @@ namespace UnityEditor.AddressableAssets.Settings.GroupSchemas
             if (m_ShowAdvanced)
             {
                 // Compression
-                prop = so.FindProperty("m_Compression");
-                ShowMixedValue(prop, otherSchemas, typeof(Enum), "m_Compression");
+                prop = so.FindProperty(nameof(m_Compression));
+                ShowMixedValue(prop, otherSchemas, typeof(Enum), nameof(m_Compression));
                 EditorGUI.BeginChangeCheck();
                 BundleCompressionMode newCompression = (BundleCompressionMode)EditorGUILayout.EnumPopup(prop.displayName, Compression);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaCompression" + name);
                     Compression = newCompression;
                     foreach (var schema in otherBundledSchemas)
-                        schema.Compression = Compression;
+                    {
+                        m_QueuedChanges.Add(() => schema.Compression = Compression);
+                    }
                 }
                 EditorGUI.showMixedValue = false;
 
                 // IncludeInBuild
-                prop = so.FindProperty("m_IncludeInBuild");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_IncludeInBuild");
+                prop = so.FindProperty(nameof(m_IncludeInBuild));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_IncludeInBuild));
                 EditorGUI.BeginChangeCheck();
                 bool newIncludeInBuild = (bool)EditorGUILayout.Toggle(prop.displayName, IncludeInBuild);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaIncludeInBuild" + name);
                     IncludeInBuild = newIncludeInBuild;
                     foreach (var schema in otherBundledSchemas)
-                        schema.IncludeInBuild = IncludeInBuild;
+                        m_QueuedChanges.Add(() => schema.IncludeInBuild = IncludeInBuild);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // ForceUniqueProvider
-                prop = so.FindProperty("m_ForceUniqueProvider");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_ForceUniqueProvider");
+                prop = so.FindProperty(nameof(m_ForceUniqueProvider));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_ForceUniqueProvider));
                 EditorGUI.BeginChangeCheck();
                 bool newForceUniqueProvider = (bool)EditorGUILayout.Toggle(prop.displayName, ForceUniqueProvider);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaForceUniqueProvider" + name);
                     ForceUniqueProvider = newForceUniqueProvider;
                     foreach (var schema in otherBundledSchemas)
-                        schema.ForceUniqueProvider = ForceUniqueProvider;
+                        m_QueuedChanges.Add(() => schema.ForceUniqueProvider = ForceUniqueProvider);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // UseAssetBundleCache
-                prop = so.FindProperty("m_UseAssetBundleCache");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_UseAssetBundleCache");
+                prop = so.FindProperty(nameof(m_UseAssetBundleCache));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_UseAssetBundleCache));
                 EditorGUI.BeginChangeCheck();
                 bool newUseAssetBundleCache = (bool)EditorGUILayout.Toggle(prop.displayName, UseAssetBundleCache);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaUseAssetBundleCache" + name);
                     UseAssetBundleCache = newUseAssetBundleCache;
                     foreach (var schema in otherBundledSchemas)
-                        schema.UseAssetBundleCache = UseAssetBundleCache;
+                        m_QueuedChanges.Add(() => schema.UseAssetBundleCache = UseAssetBundleCache);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // UseAssetBundleCrc
-                prop = so.FindProperty("m_UseAssetBundleCrc");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_UseAssetBundleCrc");
+                prop = so.FindProperty(nameof(m_UseAssetBundleCrc));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_UseAssetBundleCrc));
                 EditorGUI.BeginChangeCheck();
                 bool newUseAssetBundleCrc = (bool)EditorGUILayout.Toggle(prop.displayName, UseAssetBundleCrc);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaUseAssetBundleCrc" + name);
                     UseAssetBundleCrc = newUseAssetBundleCrc;
                     foreach (var schema in otherBundledSchemas)
-                        schema.UseAssetBundleCrc = UseAssetBundleCrc;
+                        m_QueuedChanges.Add(() => schema.UseAssetBundleCrc = UseAssetBundleCrc);
                 }
                 EditorGUI.showMixedValue = false;
 
                 //UseAssetBundleCrcForCachedBundles
-                prop = so.FindProperty("m_UseAssetBundleCrcForCachedBundles");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_UseAssetBundleCrcForCachedBundles");
+                prop = so.FindProperty(nameof(m_UseAssetBundleCrcForCachedBundles));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_UseAssetBundleCrcForCachedBundles));
                 EditorGUI.BeginChangeCheck();
                 bool newUseAssetBundleCrcForCache = (bool)EditorGUILayout.Toggle(prop.displayName, UseAssetBundleCrcForCachedBundles);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaUseAssetBundleCrcForCachedBundles" + name);
                     UseAssetBundleCrcForCachedBundles = newUseAssetBundleCrcForCache;
                     foreach (var schema in otherBundledSchemas)
-                        schema.UseAssetBundleCrcForCachedBundles = UseAssetBundleCrcForCachedBundles;
+                        m_QueuedChanges.Add(() => schema.UseAssetBundleCrcForCachedBundles = UseAssetBundleCrcForCachedBundles);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // Timeout
-                prop = so.FindProperty("m_Timeout");
-                ShowMixedValue(prop, otherSchemas, typeof(int), "m_Timeout");
+                prop = so.FindProperty(nameof(m_Timeout));
+                ShowMixedValue(prop, otherSchemas, typeof(int), nameof(m_Timeout));
                 EditorGUI.BeginChangeCheck();
                 int newTimeout = (int)EditorGUILayout.IntField(prop.displayName, Timeout);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaTimeout" + name);
                     Timeout = newTimeout;
                     foreach (var schema in otherBundledSchemas)
-                        schema.Timeout = Timeout;
+                        m_QueuedChanges.Add(() => schema.Timeout = Timeout);
+
                 }
                 EditorGUI.showMixedValue = false;
 
                 // ChunkedTransfer
-                prop = so.FindProperty("m_ChunkedTransfer");
-                ShowMixedValue(prop, otherSchemas, typeof(bool), "m_ChunkedTransfer");
+                prop = so.FindProperty(nameof(m_ChunkedTransfer));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_ChunkedTransfer));
                 EditorGUI.BeginChangeCheck();
                 bool newChunkedTransfer = (bool)EditorGUILayout.Toggle(prop.displayName, ChunkedTransfer);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaChunkedTransfer" + name);
                     ChunkedTransfer = newChunkedTransfer;
                     foreach (var schema in otherBundledSchemas)
-                        schema.ChunkedTransfer = ChunkedTransfer;
+                        m_QueuedChanges.Add(() => schema.ChunkedTransfer = ChunkedTransfer);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // RedirectLimit
-                prop = so.FindProperty("m_RedirectLimit");
-                ShowMixedValue(prop, otherSchemas, typeof(int), "m_RedirectLimit");
+                prop = so.FindProperty(nameof(m_RedirectLimit));
+                ShowMixedValue(prop, otherSchemas, typeof(int), nameof(m_RedirectLimit));
                 EditorGUI.BeginChangeCheck();
                 int newRedirectLimit = (int)EditorGUILayout.IntField(prop.displayName, RedirectLimit);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaRedirectLimit" + name);
                     RedirectLimit = newRedirectLimit;
                     foreach (var schema in otherBundledSchemas)
-                        schema.RedirectLimit = RedirectLimit;
+                        m_QueuedChanges.Add(() => schema.RedirectLimit = RedirectLimit);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // RetryCount
-                prop = so.FindProperty("m_RetryCount");
-                ShowMixedValue(prop, otherSchemas, typeof(int), "m_RetryCount");
+                prop = so.FindProperty(nameof(m_RetryCount));
+                ShowMixedValue(prop, otherSchemas, typeof(int), nameof(m_RetryCount));
                 EditorGUI.BeginChangeCheck();
                 int newRetryCount = (int)EditorGUILayout.IntField(prop.displayName, RetryCount);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaRetryCount" + name);
                     RetryCount = newRetryCount;
                     foreach (var schema in otherBundledSchemas)
-                        schema.RetryCount = RetryCount;
+                        m_QueuedChanges.Add(() => schema.RetryCount = RetryCount);
+                }
+                EditorGUI.showMixedValue = false;
+
+
+                // IncludeAddressInCatalog
+                prop = so.FindProperty(nameof(m_IncludeAddressInCatalog));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_IncludeAddressInCatalog));
+                EditorGUI.BeginChangeCheck();
+                bool newIncludeAddressInCatalog = (bool)EditorGUILayout.Toggle(prop.displayName, IncludeAddressInCatalog);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(this, "BundledAssetGroupSchemaIncludeAddressInCatalog" + name);
+                    IncludeAddressInCatalog = newIncludeAddressInCatalog;
+                    foreach (var schema in otherBundledSchemas)
+                        m_QueuedChanges.Add(() => schema.IncludeAddressInCatalog = IncludeAddressInCatalog);
+                }
+                EditorGUI.showMixedValue = false;
+
+                // IncludeGUIDInCatalog
+                prop = so.FindProperty(nameof(m_IncludeGUIDInCatalog));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_IncludeGUIDInCatalog));
+                EditorGUI.BeginChangeCheck();
+                bool newIncludeGUIDInCatalog = (bool)EditorGUILayout.Toggle(prop.displayName, IncludeGUIDInCatalog);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(this, "BundledAssetGroupSchemaIncludeGUIDInCatalog" + name);
+                    IncludeGUIDInCatalog = newIncludeGUIDInCatalog;
+                    foreach (var schema in otherBundledSchemas)
+                        m_QueuedChanges.Add(() => schema.IncludeGUIDInCatalog = IncludeGUIDInCatalog);
+                }
+                EditorGUI.showMixedValue = false;
+                // IncludeLabelsInCatalog
+                prop = so.FindProperty(nameof(m_IncludeLabelsInCatalog));
+                ShowMixedValue(prop, otherSchemas, typeof(bool), nameof(m_IncludeLabelsInCatalog));
+                EditorGUI.BeginChangeCheck();
+                bool newIncludeLabelsInCatalog = (bool)EditorGUILayout.Toggle(prop.displayName, IncludeLabelsInCatalog);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(this, "BundledAssetGroupSchemaIncludeLabelsInCatalog" + name);
+                    IncludeLabelsInCatalog = newIncludeLabelsInCatalog;
+                    foreach (var schema in otherBundledSchemas)
+                        m_QueuedChanges.Add(() => schema.IncludeLabelsInCatalog = IncludeLabelsInCatalog);
                 }
                 EditorGUI.showMixedValue = false;
 
                 // BundleMode
-                prop = so.FindProperty("m_BundleMode");
-                ShowMixedValue(prop, otherSchemas, typeof(Enum), "m_BundleMode");
+                prop = so.FindProperty(nameof(m_BundleMode));
+                ShowMixedValue(prop, otherSchemas, typeof(Enum), nameof(m_BundleMode));
                 EditorGUI.BeginChangeCheck();
                 BundlePackingMode newBundleMode = (BundlePackingMode)EditorGUILayout.EnumPopup(prop.displayName, BundleMode);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaBundleMode" + name);
                     BundleMode = newBundleMode;
                     foreach (var schema in otherBundledSchemas)
-                        schema.BundleMode = BundleMode;
+                        m_QueuedChanges.Add(() => schema.BundleMode = BundleMode);
+                }
+                EditorGUI.showMixedValue = false;
+
+                // InternalIdMode
+                prop = so.FindProperty(nameof(m_InternalIdNamingMode));
+                ShowMixedValue(prop, otherSchemas, typeof(Enum), nameof(m_InternalIdNamingMode));
+                EditorGUI.BeginChangeCheck();
+                AssetNamingMode newInternalIdMode = (AssetNamingMode)EditorGUILayout.EnumPopup(prop.displayName, InternalIdNamingMode);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    InternalIdNamingMode = newInternalIdMode;
+                    foreach (var schema in otherBundledSchemas)
+                        schema.InternalIdNamingMode = InternalIdNamingMode;
                 }
                 EditorGUI.showMixedValue = false;
 
                 //Bundle Naming
-                prop = so.FindProperty("m_BundleNaming");
-                ShowMixedValue(prop, otherSchemas, typeof(Enum), "m_BundleNaming");
+                prop = so.FindProperty(nameof(m_BundleNaming));
+                ShowMixedValue(prop, otherSchemas, typeof(Enum), nameof(m_BundleNaming));
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(prop, true);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaBundleNaming" + name);
                     BundleNamingStyle newNamingStyle = (BundleNamingStyle)prop.enumValueIndex;
                     BundleNaming = newNamingStyle;
                     foreach (var schema in otherBundledSchemas)
-                        schema.BundleNaming = BundleNaming;
+                        m_QueuedChanges.Add(() => schema.BundleNaming = BundleNaming);
                 }
                 EditorGUI.showMixedValue = false;
 
                 //Bundled Asset Provider Type
-                prop = so.FindProperty("m_BundledAssetProviderType");
-                ShowMixedValue(prop, otherSchemas, typeof(SerializedType), "m_BundledAssetProviderType");
+                prop = so.FindProperty(nameof(m_BundledAssetProviderType));
+                ShowMixedValue(prop, otherSchemas, typeof(SerializedType), nameof(m_BundledAssetProviderType));
 
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(prop, m_AssetProviderContent, true);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaAssetProviderType" + name);
                     foreach (var schema in otherBundledSchemas)
-                        schema.m_BundledAssetProviderType = BundledAssetProviderType;
+                        m_QueuedChanges.Add(() => schema.m_BundledAssetProviderType = BundledAssetProviderType);
                 }
                 EditorGUI.showMixedValue = false;
 
                 //Asset Bundle Provider Type
-                prop = so.FindProperty("m_AssetBundleProviderType");
-                ShowMixedValue(prop, otherSchemas, typeof(SerializedType), "m_AssetBundleProviderType");
+                prop = so.FindProperty(nameof(m_AssetBundleProviderType));
+                ShowMixedValue(prop, otherSchemas, typeof(SerializedType), nameof(m_AssetBundleProviderType));
 
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(prop, m_BundleProviderContent, true);
                 if (EditorGUI.EndChangeCheck())
                 {
+                    Undo.RecordObject(this,"BundledAssetGroupSchemaAssetBundleProviderType" + name);
                     foreach (var schema in otherBundledSchemas)
-                        schema.m_AssetBundleProviderType = AssetBundleProviderType;
+                        m_QueuedChanges.Add(() => schema.m_AssetBundleProviderType = AssetBundleProviderType);
                 }
 
                 EditorGUI.showMixedValue = false;
             }
+            if (m_QueuedChanges.Count > 0)
+            {
+                ProcessOtherSelectedBundledAssetGroupSchemasChanges(otherBundledSchemas);
+            }
 
             so.ApplyModifiedProperties();
+            Undo.CollapseUndoOperations(Undo.GetCurrentGroup());
+        }
+
+        internal void ProcessOtherSelectedBundledAssetGroupSchemasChanges(List<BundledAssetGroupSchema> otherBundledSchemas)
+        {
+            Undo.SetCurrentGroupName("bundledAssetGroupSchemasUndos");
+            foreach (var schema in otherBundledSchemas)
+            {
+                Undo.RecordObject(schema, "BundledAssetGroupSchema" + schema.name);
+            }
+            foreach (var change in m_QueuedChanges)
+                change.Invoke();
+            foreach (var schema in otherBundledSchemas)
+                schema.SetDirty(true);
         }
     }
 }
