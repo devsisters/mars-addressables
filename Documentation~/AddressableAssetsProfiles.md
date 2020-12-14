@@ -1,3 +1,6 @@
+---
+uid: addressables-profiles
+---
 # Addressable Assets Profiles
 The Addessable Assets Profile system allows you to create a set of string variables that more easily enables you to change how your content is built into bundles. These variables can be used to determine whether your content is local to device or on a remote server.
 
@@ -67,3 +70,5 @@ In this instance, you can see that the local and remote paths are in fact local,
 _Content with remote bundle moved to a server for production._
 
 In this case, using profiles, you could change the remote load path for "Production" to that server. Without having to change your asset groups, you can change all of your remote bundles to actually become remote.
+
+It should be noted, variables are arbitrary key-value pairs to aid development.  Setting variables such as "LocalBuildPath" does not guarantee that data built to that location is copied to the StreamingAssets path of a Player build.  Data is only copied to the Player's StreamingAssets folder from `Addressables.BuildPath`.

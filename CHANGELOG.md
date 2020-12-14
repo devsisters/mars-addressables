@@ -4,13 +4,46 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.16.15] - 2020-12-09
+- Addressables link.xml should now have it's own folder.
+- Fixed an issue where InvalidKeyException was getting thrown when calling GetDownloadSizeAsync on scenes
+- Resources folders inside Unity packages now get added to the Built In Data group
+- Fixed issue where getting selected subasset would cause an error if any subassets' type was null
+
+## [1.16.13] - 2020-11-18
+- Added option to invert the display of CheckBundleDupeDependencies Analyze rule
+- Fix GatherEntryLocations for scenes when parameter type is null
+- Added some API docs for RuntimeBuildLog and AnalyzeResultData that were missing.
+- Updated docs to explain the use of profile variables a little better.
+- Added ability to toggle Check Duplicate Bundle Dependencies analyze rule results to be arranged by Group or Asset
+- Allow assets that are inside a com.unity* package to be marked as addressable
+
+## [1.16.10] - 2020-11-04
+- Added internal naming option for the Bundled Asset Group Schema.  Instead of using the full path, there are options to use the asset guid or the hashcode of the guid.  These values are stable and wont change if the asset path changes, reducing the need to rebuild a bundle if paths change but contents do not.  The internal ids stored in the content catalog will generally be shorter than asset paths - 32 bytes for the full guid, 8 bytes for the guid hash. 
+- Added option to exclude sub catalog entries by file extension
+- Added options to exclude catalog entries for address, labels, and guids
+- Added option to optimize catalog size by extracting duplicated string in urls and file paths
+- Fixed issue where ResourceLocations were returning null for the ResourceType.
+- Added warning to build when an Addressable Group doesn't have any AddressableAssetGroupSchemas
+- Fixed issue where resource folder search was case sensitive for Mac and Linux
+- Fixed issue where warnings were getting logged incorrectly when marking an asset as Addressable using the checkbox in the inspector.
+- Fixed issue where an AssetReference's cached asset is not reset when the underlying asset re-imports.
+- Fixed issue where we were still checking for CRC when a bundle was cached.
+- Fixed bug when using Play Mode Script "Use AssetDatabase (fastest)", and calling Addressables.LoadContentCatalogAsync would fail when it had not been cached.
+
+## [1.16.7] - 2020-10-21
+- Fixed issue where InvalidHandle errors were getting thrown if an operation failed with releaseDependenciesOnFailure turned on.
+- Fixed group build and load paths not being saved when editing multiple groups at once
+- Changed Analyze Result data to be cached in the Library.  Result data was previously stored in Assets/AddressableAssetsData/AnalyzeData/AnalyzeRuleData.asset.  It is now stored in Library/com.unity/addressables/AnalyzeData/AnalyzeRuleData.json.  If detected, the Assets - version of the Analyze data will be automatically cleaned up.
+- Fixed line in AsyncOperationHandle documentation that told the wrong API for acquiring a handle
+- Moved the content update documents to their own page.  Expanded and clarified information on the update process
+
 ## [1.16.6] - 2020-09-30
 - Group hierarchy support in groups window by detecting '-' in group name
   - This can be turned on & off in the addressable asset settings inspector: Group Hierarchy with Dashes
   - This only affects the visual display, groups are still stored in the main settings object in a flat list
   - The group name is unaffected.  If you name a group "x-y-z" that will be it's name, but, with the option on, it will display as if it was in a folder called "y" that was inside a folder called "x"
 - Fixed fast mode resource locator Keys property to expand all possible keys when accessed.  For large projects with many addressable entries and folders, this property may be slow when called for the first time.
-- Group hierarchy support
 - Added detailed build layout feature. See documentation for details.
 - Fixed issue where assets in Resources weren't show full key in Groups window
 - Fixed issue where loading Addressables from a different project was throwing errors.

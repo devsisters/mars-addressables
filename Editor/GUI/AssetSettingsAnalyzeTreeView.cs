@@ -72,7 +72,6 @@ namespace UnityEditor.AddressableAssets.GUI
                 Reload();
                 UpdateSelections(GetSelection());
             });
-            AddressableAssetUtility.OpenAssetIfUsingVCIntegration(AnalyzeSystem.AnalyzeData);
         }
 
         public void FixAllSelectedRules()
@@ -86,7 +85,6 @@ namespace UnityEditor.AddressableAssets.GUI
                 Reload();
                 UpdateSelections(GetSelection());
             });
-            AddressableAssetUtility.OpenAssetIfUsingVCIntegration(AnalyzeSystem.AnalyzeData);
         }
 
         public void ClearAllSelectedRules()
@@ -99,12 +97,6 @@ namespace UnityEditor.AddressableAssets.GUI
                 Reload();
                 UpdateSelections(GetSelection());
             });
-            AddressableAssetUtility.OpenAssetIfUsingVCIntegration(AnalyzeSystem.AnalyzeData);
-        }
-
-        public void RevertAllSelectedRules()
-        {
-            //TODO
         }
 
         public bool SelectionContainsFixableRule { get; private set; }
@@ -158,8 +150,21 @@ namespace UnityEditor.AddressableAssets.GUI
                 else
                     menu.AddDisabledItem(new GUIContent("Fix Analyze Rule"));
 
-                //TODO
-                //menu.AddItem(new GUIContent("Revert Analyze Rule"), false, RevertAllSelectedRules);
+                IList<int> selectedIds = GetSelection();
+                if (selectedIds.Count == 1)
+                {
+                    AnalyzeRuleContainerTreeViewItem analyzeRuleContainer = FindItem(selectedIds[0], rootItem) as AnalyzeRuleContainerTreeViewItem;
+                    if (analyzeRuleContainer != null)
+                    {
+                        foreach (var customMenuItem in analyzeRuleContainer.analyzeRule.GetCustomContextMenuItems())
+                        {
+                            if(customMenuItem.MenuEnabled)
+                                menu.AddItem(new GUIContent(customMenuItem.MenuName), customMenuItem.ToggledOn, () => customMenuItem.MenuAction());
+                            else
+                                menu.AddDisabledItem(new GUIContent(customMenuItem.MenuName));
+                        }
+                    }
+                }
 
                 menu.ShowAsContext();
                 Repaint();
@@ -175,6 +180,8 @@ namespace UnityEditor.AddressableAssets.GUI
             string baseName = "Analyze Rules";
             string fixableRules = "Fixable Rules";
             string unfixableRules = "Unfixable Rules";
+
+            AnalyzeSystem.TreeView = this;
 
             AnalyzeRuleContainerTreeViewItem baseViewItem = new AnalyzeRuleContainerTreeViewItem(baseName.GetHashCode(), m_CurrentDepth, baseName);
             baseViewItem.children = new List<TreeViewItem>();
@@ -304,7 +311,7 @@ namespace UnityEditor.AddressableAssets.GUI
             foreach (var node in allTreeViewItems)
                 (node as AnalyzeTreeViewItemBase)?.AddIssueCountToName();
 
-            EditorUtility.SetDirty(AnalyzeSystem.AnalyzeData);
+            AnalyzeSystem.SerializeData();
         }
 
         protected override void RowGUI(RowGUIArgs args)

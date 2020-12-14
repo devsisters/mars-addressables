@@ -116,13 +116,13 @@ namespace UnityEngine.ResourceManagement
 
         /// <summary>
         /// Global exception handler.  This will be called whenever an IAsyncOperation.OperationException is set to a non-null value.
-        /// See the [ResourceManager.ExceptionHandler](../manual/ExceptionHandler.html) documentation for more details.
+        /// See the [ResourceManager.ExceptionHandler](xref:addressables-api-exception-handler) documentation for more details.
         /// </summary>
         public static Action<AsyncOperationHandle, Exception> ExceptionHandler { get; set; }
 
         /// <summary>
         /// Functor to transform internal ids before being used by the providers.
-        /// See the [TransformInternalId](../manual/TransformInternalId.html) documentation for more details.
+        /// See the [TransformInternalId](xref:addressables-api-transform-internal-id) documentation for more details.
         /// </summary>
         public Func<IResourceLocation, string> InternalIdTransformFunc { get; set; }
 
@@ -598,6 +598,27 @@ namespace UnityEngine.ResourceManagement
                 ops.Add(ProvideResource<T>(loc));
 
             op.Init(ops);
+            return StartOperation(op, default);
+        }
+        
+        /// <summary>
+        /// Create a group operation for a set of locations.
+        /// </summary>
+        /// <typeparam name="T">The expected object type for the operations.</typeparam>
+        /// <param name="locations">The list of locations to load.</param>
+        /// <param name="allowFailedDependencies">The operation succeeds if any grouped locations fail.</param>
+        /// <returns>The operation for the entire group.</returns>
+        internal AsyncOperationHandle<IList<AsyncOperationHandle>> CreateGroupOperation<T>(IList<IResourceLocation> locations, bool allowFailedDependencies)
+        {
+            var op = CreateOperation<GroupOperation>(typeof(GroupOperation), s_GroupOperationTypeHash, 0, m_ReleaseOpNonCached);
+            var ops = new List<AsyncOperationHandle>(locations.Count);
+            foreach (var loc in locations)
+                ops.Add(ProvideResource<T>(loc));
+
+            GroupOperation.GroupOperationSettings settings = GroupOperation.GroupOperationSettings.None;
+            if( allowFailedDependencies )
+                settings |= GroupOperation.GroupOperationSettings.AllowFailedDependencies;
+            op.Init(ops, settings);
             return StartOperation(op, default);
         }
 
