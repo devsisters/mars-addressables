@@ -335,7 +335,8 @@ namespace UnityEditor.AddressableAssets.Settings
             }
         }
 
-        [SerializeField]
+        // XXX(james.kim): 자동변경으로 잡히는 경우가 많아서 제거합니다.
+        // [SerializeField]
         private UnityEngine.Object m_MainAsset;
         /// <summary>
         /// The main asset object for this entry.
@@ -361,7 +362,8 @@ namespace UnityEditor.AddressableAssets.Settings
             }
         }
 
-        [SerializeField]
+        // XXX(james.kim): 자동변경으로 잡히는 경우가 많아서 제거합니다.
+        // [SerializeField]
         private UnityEngine.Object m_TargetAsset;
 
         /// <summary>
