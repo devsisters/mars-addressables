@@ -19,6 +19,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
+#if UNITY_2019_3_OR_NEWER
+using UnityEditor.Experimental;
+#endif
+
 namespace UnityEditor.AddressableAssets.Build.DataBuilders
 {
     /// <summary>
@@ -61,7 +65,7 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
             get
             {
                 if (string.IsNullOrEmpty(m_pathFormatStore))
-                    m_pathFormatStore = "{0}Library/com.unity.addressables/{1}_BuildScriptVirtualMode.json";
+                    m_pathFormatStore = "{0}" + Addressables.LibraryPath + "{1}_BuildScriptVirtualMode.json";
                 return m_pathFormatStore;
             }
             set { m_pathFormatStore = value; }
@@ -95,9 +99,9 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
             };
             m_AllBundleInputDefinitions = new List<AssetBundleBuild>();
             aaContext.runtimeData.BuildTarget = builderInput.Target.ToString();
-            aaContext.runtimeData.ProfileEvents = ProjectConfigData.postProfilerEvents;
+            aaContext.runtimeData.ProfileEvents = ProjectConfigData.PostProfilerEvents;
             aaContext.runtimeData.LogResourceManagerExceptions = aaSettings.buildSettings.LogResourceManagerExceptions;
-            aaContext.runtimeData.ProfileEvents = ProjectConfigData.postProfilerEvents;
+            aaContext.runtimeData.ProfileEvents = ProjectConfigData.PostProfilerEvents;
             aaContext.runtimeData.MaxConcurrentWebRequests = aaSettings.MaxConcurrentWebRequests;
             aaContext.runtimeData.CatalogLocations.Add(new ResourceLocationData(
                 new[] { ResourceManagerRuntimeData.kCatalogAddress },
@@ -288,7 +292,7 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
             if (!m_CreatedProviderIds.ContainsKey(bundledProviderId))
             {
                 //TODO: pull from schema instead of ProjectConfigData
-                var virtualBundleRuntimeData = new VirtualAssetBundleRuntimeData(ProjectConfigData.localLoadSpeed, ProjectConfigData.remoteLoadSpeed);
+                var virtualBundleRuntimeData = new VirtualAssetBundleRuntimeData(ProjectConfigData.LocalLoadSpeed, ProjectConfigData.RemoteLoadSpeed);
                 //save virtual runtime data to collect assets into virtual bundles
                 m_CreatedProviderIds.Add(bundledProviderId, virtualBundleRuntimeData);
             }
@@ -303,7 +307,7 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
 
 
             var bundleInputDefs = new List<AssetBundleBuild>();
-            List<AddressableAssetEntry> list = BuildScriptPackedMode.PrepGroupBundlePacking(assetGroup, bundleInputDefs, schema.BundleMode);
+            List<AddressableAssetEntry> list = BuildScriptPackedMode.PrepGroupBundlePacking(assetGroup, bundleInputDefs, schema);
             aaContext.assetEntries.AddRange(list);
             for (int i = 0; i < bundleInputDefs.Count; i++)
             {
@@ -334,12 +338,18 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
         {
             var guid = AssetDatabase.AssetPathToGUID(a);
             var legacyPath = string.Format("Library/metadata/{0}{1}/{2}", guid[0], guid[1], guid);
-#if UNITY_2020_2_OR_NEWER
+#if UNITY_2020_2_OR_NEWER            
+            var artifactID = Experimental.AssetDatabaseExperimental.ProduceArtifact(new ArtifactKey(new GUID(guid)));
+            if (Experimental.AssetDatabaseExperimental.GetArtifactPaths(artifactID, out var paths))
+                return Path.GetFullPath(paths[0]);
+            else
+                legacyPath = String.Empty;
+#elif UNITY_2020_1_OR_NEWER
             var hash = Experimental.AssetDatabaseExperimental.GetArtifactHash(guid);
             if (Experimental.AssetDatabaseExperimental.GetArtifactPaths(hash, out var paths))
                 return Path.GetFullPath(paths[0]);
             else
-                legacyPath = String.Empty; // legacy path is never valid in 2020.2+
+                legacyPath = String.Empty; // legacy path is never valid in 2020.1+
 #elif UNITY_2019_3_OR_NEWER
             if (IsAssetDatabaseV2Enabled()) // AssetDatabase V2 is optional in 2019.3 and 2019.4
             {

@@ -100,6 +100,14 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
                 m_CallBack = callback;
             }
 
+            internal override bool InvokeWaitForCompletion()
+            {
+                m_RM?.Update(Time.deltaTime);
+                if (!HasExecuted)
+                    InvokeExecute();
+                return true;
+            }
+
             protected override void Execute()
             {
                 if (m_CallBack != null)
@@ -107,6 +115,24 @@ namespace UnityEngine.ResourceManagement.ResourceProviders
                 else
                     Complete(true, true, "");
             }
+        }
+    }
+
+    /// <summary>
+    /// Contains options for provider load requests
+    /// </summary>
+    [Serializable]
+    internal class ProviderLoadRequestOptions
+    {
+        [SerializeField] bool m_IgnoreFailures = false;
+
+        /// <summary>
+        /// IgnoreFailures for provider load requests
+        /// </summary>
+        internal bool IgnoreFailures
+        {
+            get { return m_IgnoreFailures; }
+            set { m_IgnoreFailures = value; }
         }
     }
 }

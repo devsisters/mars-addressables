@@ -38,6 +38,11 @@ public abstract class AddressablesTestFixture : IPrebuildSetup, IPostBuildCleanu
         Packed
     }
     protected virtual TestBuildScriptMode BuildScriptMode { get; }
+    
+    protected string GetGeneratedAssetsPath()
+    {
+	    return Path.Combine("Assets", "gen", m_UniqueTestName);
+    }
 
     [UnitySetUp]
     public IEnumerator RuntimeSetup()
@@ -72,7 +77,7 @@ public abstract class AddressablesTestFixture : IPrebuildSetup, IPostBuildCleanu
 
         var activeScenePath = EditorSceneManager.GetActiveScene().path;
 
-        string rootFolder = Path.Combine("Assets", "gen", m_UniqueTestName);
+        string rootFolder = GetGeneratedAssetsPath();
         if (Directory.Exists(rootFolder))
             Directory.Delete(rootFolder, true);
         Directory.CreateDirectory(rootFolder);
@@ -106,7 +111,7 @@ public abstract class AddressablesTestFixture : IPrebuildSetup, IPostBuildCleanu
         var buildContext = new AddressablesDataBuilderInput(settings);
         buildContext.RuntimeSettingsFilename = "settings" + m_UniqueTestName + ".json";
         buildContext.RuntimeCatalogFilename = "catalog" + m_UniqueTestName + ".json";
-        buildContext.PathFormat = "{0}Library/com.unity.addressables/{1}_" + m_UniqueTestName + ".json";
+        buildContext.PathFormat = "{0}" + Addressables.LibraryPath + "{1}_" + m_UniqueTestName + ".json";
         if (BuildScriptMode == TestBuildScriptMode.PackedPlaymode)
         {
             IDataBuilder packedModeBuilder = GetBuilderOfType(settings, typeof(BuildScriptPackedMode));
@@ -152,7 +157,7 @@ public abstract class AddressablesTestFixture : IPrebuildSetup, IPostBuildCleanu
         }
         else
         {
-            return string.Format("{0}Library/com.unity.addressables/settings_{1}.json", "file://{UnityEngine.Application.dataPath}/../", m_UniqueTestName);
+            return string.Format("{0}" + Addressables.LibraryPath + "settings_{1}.json", "file://{UnityEngine.Application.dataPath}/../", m_UniqueTestName);
         }
     }
 
@@ -188,5 +193,18 @@ public abstract class AddressablesTestFixture : IPrebuildSetup, IPostBuildCleanu
         Assert.IsFalse(unloadOp.Result.Scene.isLoaded);
         addressables.Release(unloadOp);
         Assert.IsNull(SceneManager.GetSceneByName(sceneName).name);
+    }
+    
+    internal static IEnumerator UnloadSceneFromHandlerRefCountCheck(AsyncOperationHandle<SceneInstance> op, AddressablesImpl addressables)
+    {
+        string sceneName = op.Result.Scene.name;
+        Assert.IsNotNull(sceneName);
+        var prevRefCount = op.ReferenceCount;
+        var unloadOp = addressables.UnloadSceneAsync(op, false);
+        yield return unloadOp;
+        Assert.AreEqual(AsyncOperationStatus.Succeeded, unloadOp.Status);
+        Assert.IsFalse(unloadOp.Result.Scene.isLoaded);
+        if(op.IsValid())
+            Assert.AreEqual(prevRefCount-1,op.ReferenceCount);
     }
 }

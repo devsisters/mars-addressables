@@ -152,6 +152,21 @@ namespace UnityEngine.ResourceManagement.AsyncOperations
             return m_InternalOp == null ? 0 : m_InternalOp.GetHashCode() * 17 + m_Version;
         }
 
+        /// <summary>
+        /// Synchronously complete the async operation.
+        /// </summary>
+        /// <returns>The result of the operation or null.</returns>
+        public TObject WaitForCompletion()
+        {
+            if(IsValid())
+                InternalOp.WaitForCompletion();
+
+            if(IsValid())
+                return Result;
+
+            return default(TObject);
+        }
+
         AsyncOperationBase<TObject> InternalOp
         {
             get
@@ -189,6 +204,11 @@ namespace UnityEngine.ResourceManagement.AsyncOperations
 
         /// <summary>
         /// The progress of the internal operation.
+        /// This is evenly weighted between all sub-operations. For example, a LoadAssetAsync call could potentially
+        /// be chained with InitializeAsync and have multiple dependent operations that download and load content.
+        /// In that scenario, PercentComplete would reflect how far the overal operation was, and would not accurately
+        /// represent just percent downloaded or percent loaded into memory.
+        /// For accurate download percentages, use GetDownloadStatus(). 
         /// </summary>
         public float PercentComplete
         {
@@ -416,6 +436,11 @@ namespace UnityEngine.ResourceManagement.AsyncOperations
 
         /// <summary>
         /// The progress of the internal operation.
+        /// This is evenly weighted between all sub-operations. For example, a LoadAssetAsync call could potentially
+        /// be chained with InitializeAsync and have multiple dependent operations that download and load content.
+        /// In that scenario, PercentComplete would reflect how far the overal operation was, and would not accurately
+        /// represent just percent downloaded or percent loaded into memory.
+        /// For accurate download percentages, use GetDownloadStatus(). 
         /// </summary>
         public float PercentComplete
         {
@@ -497,5 +522,18 @@ namespace UnityEngine.ResourceManagement.AsyncOperations
         /// Overload for <see cref="IEnumerator.Reset"/>.
         /// </summary>
         void IEnumerator.Reset() {}
+
+        /// <summary>
+        /// Synchronously complete the async operation.
+        /// </summary>
+        /// <returns>The result of the operation or null.</returns>
+        public object WaitForCompletion()
+        {
+            if (IsValid())
+                InternalOp.WaitForCompletion();
+            if(IsValid())
+                return Result;
+            return null;
+        }
     }
 }

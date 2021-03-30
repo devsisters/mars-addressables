@@ -161,7 +161,6 @@ namespace UnityEngine.ResourceManagement
         Action<IAsyncOperation> m_ReleaseInstanceOp;
         static int s_GroupOperationTypeHash = typeof(GroupOperation).GetHashCode();
         static int s_InstanceOperationTypeHash = typeof(InstanceOperation).GetHashCode();
-
         /// <summary>
         /// Add an update reveiver.
         /// </summary>
@@ -467,6 +466,14 @@ namespace UnityEngine.ResourceManagement
                 get { return "CompletedOperation";}
             }
 
+            internal override bool InvokeWaitForCompletion()
+            {
+                m_RM?.Update(Time.deltaTime);
+                if (!HasExecuted)
+                    InvokeExecute();
+                return true;
+            }
+
             protected override void Execute()
             {
                 Complete(Result, m_Success, m_ErrorMsg, m_ReleaseDependenciesOnFailure);
@@ -706,7 +713,7 @@ namespace UnityEngine.ResourceManagement
                 callbackGeneric = (x) => callback((TObject)(x.Result));
             }
             var typelessHandle = ProvideResourceGroupCached(locations, CalculateLocationsHash(locations, typeof(TObject)), typeof(TObject), callbackGeneric, releaseDependenciesOnFailure);
-            var chainOp = CreateChainOperationInternal<IList<TObject>>(typelessHandle, (resultHandle) =>
+            var chainOp = CreateChainOperation<IList<TObject>>(typelessHandle, (resultHandle) =>
             {
                 AsyncOperationHandle<IList<AsyncOperationHandle>> handleToHandles = resultHandle.Convert<IList<AsyncOperationHandle>>();
 
@@ -789,8 +796,9 @@ namespace UnityEngine.ResourceManagement
         /// <typeparam name="TObjectDependency">The type of the dependency operation.</typeparam>
         /// <param name="dependentOp">The dependency operation.</param>
         /// <param name="callback">The callback method that will create the dependent operation from the dependency operation.</param>
+        /// <param name="releaseDependenciesOnFailure"> Whether to release dependencies if the created operation has failed.</param>
         /// <returns>The operation handle.</returns>
-        internal AsyncOperationHandle<TObject> CreateChainOperationInternal<TObject, TObjectDependency>(AsyncOperationHandle<TObjectDependency> dependentOp, Func<AsyncOperationHandle<TObjectDependency>, AsyncOperationHandle<TObject>> callback, bool releaseDependenciesOnFailure = true)
+        public AsyncOperationHandle<TObject> CreateChainOperation<TObject, TObjectDependency>(AsyncOperationHandle<TObjectDependency> dependentOp, Func<AsyncOperationHandle<TObjectDependency>, AsyncOperationHandle<TObject>> callback, bool releaseDependenciesOnFailure = true)
         {
             var op = CreateOperation<ChainOperation<TObject, TObjectDependency>>(typeof(ChainOperation<TObject, TObjectDependency>), typeof(ChainOperation<TObject, TObjectDependency>).GetHashCode(), 0, null);
             op.Init(dependentOp, callback, releaseDependenciesOnFailure);
@@ -803,8 +811,9 @@ namespace UnityEngine.ResourceManagement
         /// <typeparam name="TObject">The type of operation handle to return.</typeparam>
         /// <param name="dependentOp">The dependency operation.</param>
         /// <param name="callback">The callback method that will create the dependent operation from the dependency operation.</param>
+        /// <param name="releaseDependenciesOnFailure"> Whether to release dependencies if the created operation has failed.</param>
         /// <returns>The operation handle.</returns>
-        internal AsyncOperationHandle<TObject> CreateChainOperationInternal<TObject>(AsyncOperationHandle dependentOp, Func<AsyncOperationHandle, AsyncOperationHandle<TObject>> callback, bool releaseDependenciesOnFailure = true)
+        public AsyncOperationHandle<TObject> CreateChainOperation<TObject>(AsyncOperationHandle dependentOp, Func<AsyncOperationHandle, AsyncOperationHandle<TObject>> callback, bool releaseDependenciesOnFailure = true)
         {
             var cOp = new ChainOperationTypelessDepedency<TObject>();
             cOp.Init(dependentOp, callback, releaseDependenciesOnFailure);
@@ -861,6 +870,18 @@ namespace UnityEngine.ResourceManagement
                 {
                     return m_dependency.PercentComplete;
                 }
+            }
+
+            internal override bool InvokeWaitForCompletion()
+            {
+                if (m_dependency.IsValid() && !m_dependency.IsDone)
+                    m_dependency.WaitForCompletion();
+
+                m_RM?.Update(Time.deltaTime);
+                if (m_instance == null && !HasExecuted)
+                    InvokeExecute();
+
+                return m_instance != null;
             }
 
             protected override void Execute()

@@ -180,19 +180,49 @@ namespace UnityEditor.AddressableAssets.Tests
             LogAssert.ignoreFailingMessages = true;
             AddressableAssetSettings oldSettings = AddressableAssetSettingsDefaultObject.Settings;
             AddressableAssetSettingsDefaultObject.Settings = Settings;
-
-            bool callbackCalled = false;
-            BuildScript.buildCompleted += (result) =>
+            
+            try
             {
-                callbackCalled = true;
-            };
-            AddressableAssetSettings.BuildPlayerContent();
-            Assert.IsTrue(callbackCalled);
+                bool callbackCalled = false;
+                BuildScript.buildCompleted += (result) =>
+                {
+                    callbackCalled = true;
+                };
+                AddressableAssetSettings.BuildPlayerContent();
+                Assert.IsTrue(callbackCalled);
+            }
+            finally
+            {
+                if (oldSettings != null)
+                {
+                    AddressableAssetSettingsDefaultObject.Settings = oldSettings;
+                    AddressableAssetSettings.BuildPlayerContent();
+                }
+                LogAssert.ignoreFailingMessages = false;
+            }
+        }
+        
+        [Test]
+        public void BuildCompleteWithResult()
+        {
+            LogAssert.ignoreFailingMessages = true;
+            AddressableAssetSettings oldSettings = AddressableAssetSettingsDefaultObject.Settings;
+            AddressableAssetSettingsDefaultObject.Settings = Settings;
 
-            if (oldSettings != null)
-                AddressableAssetSettingsDefaultObject.Settings = oldSettings;
-            AddressableAssetSettings.BuildPlayerContent();
-            LogAssert.ignoreFailingMessages = false;
+            try
+            {
+                AddressableAssetSettings.BuildPlayerContent(out AddressablesPlayerBuildResult result);
+                Assert.IsTrue(string.IsNullOrEmpty(result.Error));
+            }
+            finally
+            {
+                if (oldSettings != null)
+                {
+                    AddressableAssetSettingsDefaultObject.Settings = oldSettings;
+                    AddressableAssetSettings.BuildPlayerContent();
+                }
+                LogAssert.ignoreFailingMessages = false;
+            }
         }
 
         [Test]
@@ -311,9 +341,10 @@ namespace UnityEditor.AddressableAssets.Tests
         public void Building_CreatesPerformanceReportWithMetaData()
         {
             Settings.BuildPlayerContentImpl();
-            string text = File.ReadAllText("Library/com.unity.addressables/AddressablesBuildTEP.json");
+            string path = Addressables.LibraryPath + "AddressablesBuildTEP.json";
+            FileAssert.Exists(path);
+            string text = File.ReadAllText(path);
             StringAssert.Contains("com.unity.addressables", text);
-            FileAssert.Exists("Library/com.unity.addressables/AddressablesBuildTEP.json");
         }
 
 #endif
@@ -350,6 +381,26 @@ namespace UnityEditor.AddressableAssets.Tests
             }
 
             Settings.RemoveGroup(group);
+        }
+
+        // ADDR-1755
+        [Test]
+        public void WhenBundleLocalCatalogEnabled_BuildScriptPacked_DoesNotCreatePerformanceLogReport()
+        {
+            string logPath = $"Library/com.unity.addressables/aa/{PlatformMappingService.GetPlatformPathSubFolder()}/buildlogtep.json";
+
+            if (File.Exists(logPath))
+                File.Delete(logPath);
+
+            Settings.BundleLocalCatalog = true;
+
+            var context = new AddressablesDataBuilderInput(Settings);
+            BuildScriptBase db = (BuildScriptBase)Settings.DataBuilders.Find(x => x.GetType() == typeof(BuildScriptPackedMode));
+            
+            Assert.IsFalse(File.Exists(logPath)); // make sure file does not exist before build 
+
+            var res = db.BuildData<AddressablesPlayerBuildResult>(context);
+            Assert.IsFalse(File.Exists(logPath));
         }
 
         [Test]
@@ -408,7 +459,6 @@ namespace UnityEditor.AddressableAssets.Tests
         }
 
         [Test]
-        [Ignore("ADDR-1606, LogAssert message no longer throws as of 2020.2b11")]
         public void WhenFileTypeIsInvalid_AndContentCatalogsAreCreated_BuildFails()
         {
             var context = new AddressablesDataBuilderInput(Settings);
@@ -440,8 +490,8 @@ namespace UnityEditor.AddressableAssets.Tests
         [Test]
         public void WhenFileTypeIsInvalid_AndContentCatalogsAreCreated_IgnoreUnsupportedFilesInBuildIsSet_BuildSucceedWithWarning()
         {
-            bool oldValue = ProjectConfigData.ignoreUnsupportedFilesInBuild;
-            ProjectConfigData.ignoreUnsupportedFilesInBuild = true;
+            bool oldValue = Settings.IgnoreUnsupportedFilesInBuild;
+            Settings.IgnoreUnsupportedFilesInBuild = true;
 
             var context = new AddressablesDataBuilderInput(Settings);
 
@@ -477,7 +527,7 @@ namespace UnityEditor.AddressableAssets.Tests
 
             Settings.RemoveAssetEntry(guid, false);
             AssetDatabase.DeleteAsset(path);
-            ProjectConfigData.ignoreUnsupportedFilesInBuild = oldValue;
+            Settings.IgnoreUnsupportedFilesInBuild = oldValue;
         }
     }
 }

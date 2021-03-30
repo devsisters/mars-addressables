@@ -9,9 +9,12 @@ namespace UnityEngine.ResourceManagement
     {
         AsyncOperationHandle<TObjectDependency> m_DepOp;
         AsyncOperationHandle<TObject> m_WrappedOp;
+        DownloadStatus m_depStatus = default;
+        DownloadStatus m_wrapStatus = default;
         Func<AsyncOperationHandle<TObjectDependency>, AsyncOperationHandle<TObject>> m_Callback;
         Action<AsyncOperationHandle<TObject>> m_CachedOnWrappedCompleted;
         bool m_ReleaseDependenciesOnFailure = true;
+        
         public ChainOperation()
         {
             m_CachedOnWrappedCompleted = OnWrappedCompleted;
@@ -21,7 +24,7 @@ namespace UnityEngine.ResourceManagement
 
         protected override void GetDependencies(List<AsyncOperationHandle> deps)
         {
-            if(m_DepOp.IsValid())
+            if (m_DepOp.IsValid())
                 deps.Add(m_DepOp);
         }
 
@@ -31,6 +34,26 @@ namespace UnityEngine.ResourceManagement
             m_DepOp.Acquire();
             m_Callback = callback;
             m_ReleaseDependenciesOnFailure = releaseDependenciesOnFailure;
+            RefreshDownloadStatus();
+        }
+
+        internal override bool InvokeWaitForCompletion()
+        {
+            if (IsDone)
+                return true;
+
+            if (!m_DepOp.IsDone)
+                m_DepOp.WaitForCompletion();
+
+            m_RM?.Update(Time.deltaTime);
+
+            if (!HasExecuted)
+                InvokeExecute();
+
+            if (!m_WrappedOp.IsValid())
+                return m_WrappedOp.IsDone;
+            m_WrappedOp.WaitForCompletion();
+            return m_WrappedOp.IsDone;
         }
 
         protected override void Execute()
@@ -65,9 +88,14 @@ namespace UnityEngine.ResourceManagement
 
         internal override DownloadStatus GetDownloadStatus(HashSet<object> visited)
         {
-            var depStatus = m_DepOp.IsValid() ? m_DepOp.InternalGetDownloadStatus(visited) : default;
-            var wrapStatus = m_WrappedOp.IsValid() ? m_WrappedOp.InternalGetDownloadStatus(visited) : default;
-            return new DownloadStatus() { DownloadedBytes = depStatus.DownloadedBytes + wrapStatus.DownloadedBytes, TotalBytes = depStatus.TotalBytes + wrapStatus.TotalBytes, IsDone = IsDone };
+            RefreshDownloadStatus(visited);
+            return new DownloadStatus() { DownloadedBytes = m_depStatus.DownloadedBytes + m_wrapStatus.DownloadedBytes, TotalBytes = m_depStatus.TotalBytes + m_wrapStatus.TotalBytes, IsDone = IsDone };
+        }
+
+        void RefreshDownloadStatus(HashSet<object> visited = default)
+        {
+            m_depStatus = m_DepOp.IsValid() ? m_DepOp.InternalGetDownloadStatus(visited) : m_depStatus;
+            m_wrapStatus = m_WrappedOp.IsValid() ? m_WrappedOp.InternalGetDownloadStatus(visited) : m_wrapStatus;
         }
 
         protected override float Progress
@@ -100,6 +128,8 @@ namespace UnityEngine.ResourceManagement
     {
         AsyncOperationHandle m_DepOp;
         AsyncOperationHandle<TObject> m_WrappedOp;
+        DownloadStatus m_depStatus = default;
+        DownloadStatus m_wrapStatus = default;
         Func<AsyncOperationHandle, AsyncOperationHandle<TObject>> m_Callback;
         Action<AsyncOperationHandle<TObject>> m_CachedOnWrappedCompleted;
         bool m_ReleaseDependenciesOnFailure = true;
@@ -113,7 +143,7 @@ namespace UnityEngine.ResourceManagement
 
         protected override void GetDependencies(List<AsyncOperationHandle> deps)
         {
-            if(m_DepOp.IsValid())
+            if (m_DepOp.IsValid())
                 deps.Add(m_DepOp);
         }
 
@@ -123,6 +153,26 @@ namespace UnityEngine.ResourceManagement
             m_DepOp.Acquire();
             m_Callback = callback;
             m_ReleaseDependenciesOnFailure = releaseDependenciesOnFailure;
+            RefreshDownloadStatus();
+        }
+
+        internal override bool InvokeWaitForCompletion()
+        {
+            if (IsDone)
+                return true;
+
+            if (!m_DepOp.IsDone)
+                m_DepOp.WaitForCompletion();
+
+            m_RM?.Update(Time.deltaTime);
+
+            if (!HasExecuted)
+                InvokeExecute();
+
+            if (!m_WrappedOp.IsValid())
+                return m_WrappedOp.IsDone;
+            m_WrappedOp.WaitForCompletion();
+            return m_WrappedOp.IsDone;
         }
 
         protected override void Execute()
@@ -157,9 +207,14 @@ namespace UnityEngine.ResourceManagement
 
         internal override DownloadStatus GetDownloadStatus(HashSet<object> visited)
         {
-            var depStatus = m_DepOp.IsValid() ? m_DepOp.InternalGetDownloadStatus(visited) : default;
-            var wrapStatus = m_WrappedOp.IsValid() ? m_WrappedOp.InternalGetDownloadStatus(visited) : default;
-            return new DownloadStatus() { DownloadedBytes = depStatus.DownloadedBytes + wrapStatus.DownloadedBytes, TotalBytes = depStatus.TotalBytes + wrapStatus.TotalBytes, IsDone = IsDone };
+            RefreshDownloadStatus(visited);
+            return new DownloadStatus() { DownloadedBytes = m_depStatus.DownloadedBytes + m_wrapStatus.DownloadedBytes, TotalBytes = m_depStatus.TotalBytes + m_wrapStatus.TotalBytes, IsDone = IsDone };
+        }
+
+        void RefreshDownloadStatus(HashSet<object> visited = default)
+        {
+            m_depStatus = m_DepOp.IsValid() ? m_DepOp.InternalGetDownloadStatus(visited) : m_depStatus;
+            m_wrapStatus = m_WrappedOp.IsValid() ? m_WrappedOp.InternalGetDownloadStatus(visited) : m_wrapStatus;
         }
 
         protected override float Progress

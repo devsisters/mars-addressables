@@ -4,6 +4,108 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.17.15] - 2021-03-23
+- Fixed FileNotFoundException when using bundle naming mode "Filename" with Unity Cloud Build.
+- Fixed a bug where LoadAssetsAsync handle Completed callback is invoked before all individual Asset callbacks.
+- Added in Asset validator on Editor startup.  This ensures that assets deleted when the editor was closed are removed from Addressables.
+- Fixed bug where the current amount of downloaded bytes was not properly updated
+
+## [1.17.13] - 2021-03-10
+- Fixed issue when loading a Sprite from a SpriteAtlas from an Addressable folder in AssetDatabase mode.
+- Fixed bug in AssetReference "Make Addressable" functionality (when referencing an asset no longer addressable)
+- Fixed bug with cyclic references in profile variable causing an infinite loop.
+- Fixed bug where cached asset type could get stuck with DefaultType, an invalid Editor type
+- Fixed issue where AsyncOperationHandle.Completed is called after AsyncOperationHandle.Task returns when the handle is already done.
+- Fixed some faulty logic in GetDownloadStatus() when errors occur
+- Removed extra dependencies that were being flagged as modified when running Check For Content Update Restrictions.
+- Fixed a bug where the result of a Task could be inconsistent and return null given certain race conditions
+- Fixed bug where UnloadSceneAsync decreased ref count more than once, and added unload scene to Release if ref count goes to zero
+- Fixed issue where a popup appears when an AddressableAsset file is being modified even if the file is checked out locally.
+- Fixed bug where fast mode wasn't showing events in the profiler
+- Remove check for isUpdating and isCompiling so GetSettings(true) still tries to load the settings when compiling or updating
+- Fixed issue where modified local static bundle dependencies fail to load after updating a previous build. Fix is compatible with older shipped content.
+
+## [1.17.6-preview] - 2021-02-23
+- Fixed issue where OnGlobalModification events would be EntryMoved when adding new Entries instead of EntryAdded.
+- Fixed issue where a previously built player fails to load content after running Content Update with missing local bundles
+- Fixed bug where ClearDependencyCacheAsync was throwing invalid handle exceptions if auto releasing the handle
+- Fixed a bug when SerializeReference entries in link.xml for addressable was causing Unity linker to fail.
+- Added results out parameter to AddressableAssetSettings.BuildPlayerContent.
+
+## [1.17.5-preview] - 2021-02-08
+- Fixed performance issue when disabling "Addressable" for multiple Assets in the Inspector.
+- Added option to set the build path of addressables_content_state.bin file.
+- The buildlogtep.json file is not generated when building the catalog bundle.
+- Fixed invalid handle exception getting thrown when static AssetReferences were used with domain reload turned off
+- Fixed catalog using invalid load path for Groups built with "bundle naming mode" "Filename".
+- Added option to set custom prefix on the unitybuiltinshader AssetBundle
+- Added documentation explaining how dependencies affect Content Update
+- Sub-assets with arbitrary main type can now be assigned to an asset reference if types match
+
+## [1.17.4-preview] - 2021-01-27
+- Removed unnecessary logging when deleting temporary Addressables build data.
+- Added WaitForCompletion() on AsyncOperationHandles.  This allows async operation to be executed synchronously
+- Alphanumeric sorting in the group window can be enabled through a setting in the editor preferences
+- Change to set IgnoreFailures with LoadOptions.IgnoreFailures stored in the IResourceLocation.Data if not null
+- Fixed issue when loading legacy Resources from Addressables using the guid when playmode is set to AssetDatabase.
+- Fixed some compile warnings on 2020.2
+- Change to use full path for name of cached catalog.
+
+## [1.17.2-preview] - 2021-01-14
+- Add silent fail option to providers to get rid of error when cache not found as expected 
+- Hierarchy now fully displayed in search results when 'show groups as hierarchy' and 'hierarchical search' options are enabled
+- OnValidate is now called when an AssetReference changes
+- Fixed bugs in Use Asset Database play mode related to multiple folders with matching addresses
+- Made the following APIs public:
+  - ResourceManager.CreateChainOperation
+  - AddressablesAnalyzeResultData
+  - AddressableAssetSettings.OptimizeCatalogSize
+  - BundledAssetGroupSchema.AssetNamingMode
+  - BundledAssetGroupSchema.IncludeAddressInCatalog
+  - BundledAssetGroupSchema.IncludeGUIDInCatalog
+  - BundledAssetGroupSchema.IncludeLabelsInCatalog
+  - BundledAssetGroupSchema.InternalIdNamingMode
+  - BuildScriptBase.Log
+  - ResourceManagerRuntimeData.AddressablesVersion
+  - ProjectConfigData
+    - ProjectConfigData.ShowSubObjectsInGroupView
+    - ProjectConfigData.GenerateBuildLayout
+    - ProjectConfigData.ActivePlayModeIndex
+    - ProjectConfigData.PostProfilerEvents
+    - ProjectConfigData.LocalLoadSpeed
+    - ProjectConfigData.RemoteLoadSpeed
+    - ProjectConfigData.HierarchicalSearch
+    - ProjectConfigData.ShowGroupsAsHierarchy
+  - BuildLayoutGenerationTask
+  - BuildLayoutGenerationTask.BundleNameRemap
+  - ExtractDataTask.BuildContext
+  - ContentCatalogData.SetData(IList<ContentCatalogDataEntry> data, bool optimizeSize)
+  - ContentCatalogData(string id) constructor
+  - ContentUpdateContext
+    - ContentUpdateContext.GuidToPreviousAssetStateMap
+    - ContentUpdateContext.IdToCatalogDataEntryMap
+    - ContentUpdateContext.BundleToInternalBundleIdMap
+    - ContentUpdateContext.WriteData
+    - ContentUpdateContext.ContentState
+    - ContentUpdateContext.Registry
+    - ContentUpdateContext.PreviousAssetStateCarryOver
+  - RevertUnchangedAssetsToPreviousAssetState
+    - RevertUnchangedAssetsToPreviousAssetState.Run
+  - AddressableAssetEntry.GetAssetLoadPath(bool isBundled, HashSet<string> otherLoadPaths)
+  - AddressableAssetSettings.IgnoreUnsupportedFilesInBuild
+
+## [1.17.0-preview] - 2020-12-13
+- Added option to clear other cahced versions of asset bundles when a new version has been loaded.
+- Added options for internal naming of asset bundles.  This will allow for deterministic naming to avoid unintended diffs for content updates.
+- The "Ignore Invalid/Unsupported Files" option is now saved in the settings
+- Fixed issue where Filename only bundle naming schemas were overwriting old bundles prematurely in content update.
+
+## [1.16.17] - 2021-02-25
+- Updated group rename logic to support engine AssetDatabase fix. Change should be transparent to users.
+
+## [1.16.16] - 2021-01-20
+- Updated dependency versions for testcase fix
+
 ## [1.16.15] - 2020-12-09
 - Addressables link.xml should now have it's own folder.
 - Fixed an issue where InvalidKeyException was getting thrown when calling GetDownloadSizeAsync on scenes

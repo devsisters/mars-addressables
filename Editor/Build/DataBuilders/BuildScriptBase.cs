@@ -34,6 +34,11 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
         [SerializedTypeRestrictionAttribute(type = typeof(ISceneProvider))]
         public SerializedType sceneProviderType = new SerializedType() { Value = typeof(SceneProvider) };
 
+        /// <summary>
+        /// Stores the logged information of all the build tasks.
+        /// </summary>
+        public IBuildLogger Log { get { return m_Log; } }
+
         [NonSerialized]
         internal IBuildLogger m_Log;
 
@@ -87,7 +92,7 @@ namespace UnityEditor.AddressableAssets.Build.DataBuilders
             }
 
             if (builderInput.Logger == null && m_Log != null)
-                WriteBuildLog((BuildLog)m_Log, Path.GetDirectoryName(Application.dataPath) + "/Library/com.unity.addressables");
+                WriteBuildLog((BuildLog)m_Log, Path.GetDirectoryName(Application.dataPath) + "/" + Addressables.LibraryPath);
 
             return result;
         }

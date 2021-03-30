@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using UnityEditor.AddressableAssets.Build;
 using UnityEditor.AddressableAssets.Build.DataBuilders;
+using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
 using UnityEngine.AddressableAssets.ResourceProviders;
+using UnityEngine.AddressableAssets.Utility;
+using UnityEngine.ResourceManagement;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.ResourceManagement.Util;
@@ -14,12 +17,14 @@ namespace UnityEditor.AddressableAssets.Settings
     {
         AddressablesImpl m_addressables;
         AddressableAssetSettings m_settings;
+        internal ResourceManagerDiagnostics m_Diagnostics;
         AsyncOperationHandle<IList<AsyncOperationHandle>> groupOp;
         public FastModeInitializationOperation(AddressablesImpl addressables, AddressableAssetSettings settings)
         {
             m_addressables = addressables;
             m_settings = settings;
             m_addressables.ResourceManager.RegisterForCallbacks();
+            m_Diagnostics = new ResourceManagerDiagnostics(m_addressables.ResourceManager);
         }
 
         static T GetBuilderOfType<T>(AddressableAssetSettings settings) where T : class, IDataBuilder
@@ -33,6 +38,14 @@ namespace UnityEditor.AddressableAssets.Settings
             return null;
         }
 
+        internal override bool InvokeWaitForCompletion()
+        {
+            m_RM?.Update(Time.deltaTime);
+            if(!HasExecuted)
+                InvokeExecute();
+            return IsDone;
+        }
+
         protected override void Execute()
         {
             var db = GetBuilderOfType<BuildScriptFastMode>(m_settings);
@@ -42,6 +55,13 @@ namespace UnityEditor.AddressableAssets.Settings
             var locator = new AddressableAssetSettingsLocator(m_settings);
             m_addressables.AddResourceLocator(locator);
             m_addressables.AddResourceLocator(new DynamicResourceLocator(m_addressables));
+            m_addressables.ResourceManager.postProfilerEvents = ProjectConfigData.PostProfilerEvents;
+            if (!m_addressables.ResourceManager.postProfilerEvents)
+            {
+                m_Diagnostics.Dispose();
+                m_Diagnostics = null;
+                m_addressables.ResourceManager.ClearDiagnosticCallbacks();
+            }
             //NOTE: for some reason, the data builders can get lost from the settings asset during a domain reload - this only happens in tests and custom instance and scene providers are not needed
             m_addressables.InstanceProvider = db == null ? new InstanceProvider() : ObjectInitializationData.CreateSerializedInitializationData(db.instanceProviderType.Value).CreateInstance<IInstanceProvider>();
             m_addressables.SceneProvider = db == null ? new SceneProvider() : ObjectInitializationData.CreateSerializedInitializationData(db.sceneProviderType.Value).CreateInstance<ISceneProvider>();
@@ -51,6 +71,8 @@ namespace UnityEditor.AddressableAssets.Settings
             m_addressables.ResourceManager.ResourceProviders.Add(new LegacyResourcesProvider());
             m_addressables.ResourceManager.ResourceProviders.Add(new AtlasSpriteProvider());
             m_addressables.ResourceManager.ResourceProviders.Add(new ContentCatalogProvider(m_addressables.ResourceManager));
+            WebRequestQueue.SetMaxConcurrentRequests(m_settings.MaxConcurrentWebRequests);
+
             if (m_settings.InitializationObjects.Count == 0)
             {
                 Complete(locator, true, null);

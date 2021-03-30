@@ -139,7 +139,59 @@ namespace AddressableAssetsIntegrationTests
             Assert.AreEqual("topleft", op2.Result.name);
             op2.Release();
         }
+        
+        [UnityTest]
+        public IEnumerator CanLoadFromFolderEntry_SpriteAtlas()
+        {
+	        //Setup
+	        yield return Init();
 
+	        var op = m_Addressables.LoadAssetAsync<SpriteAtlas>("folderEntry/atlas.spriteatlas");
+	        yield return op;
+	        Assert.IsNotNull(op.Result);
+	        Assert.AreEqual(typeof(SpriteAtlas), op.Result.GetType());
+	        op.Release();
+        }
+
+        [UnityTest]
+        public IEnumerator CanLoadFromFolderEntry_SpriteFromSpriteAtlas()
+        {
+	        //Setup
+	        yield return Init();
+
+	        var op = m_Addressables.LoadAssetAsync<Sprite>("folderEntry/atlas.spriteatlas[sprite]");
+	        yield return op;
+	        Assert.IsNotNull(op.Result);
+	        Assert.AreEqual(typeof(Sprite), op.Result.GetType());
+	        op.Release();
+        }
+        
+        [UnityTest]
+        public IEnumerator CanLoadFromFolderEntry_Texture()
+        {
+	        //Setup
+	        yield return Init();
+
+	        var op = m_Addressables.LoadAssetAsync<Texture2D>("folderEntry/spritesheet.png");
+	        yield return op;
+	        Assert.IsNotNull(op.Result);
+	        Assert.AreEqual(typeof(Texture2D), op.Result.GetType());
+	        op.Release();
+        }
+        
+        [UnityTest]
+        public IEnumerator CanLoadFromFolderEntry_SpriteFromTexture()
+        {
+	        //Setup
+	        yield return Init();
+
+	        var op = m_Addressables.LoadAssetAsync<Sprite>("folderEntry/spritesheet.png[topleft]");
+	        yield return op;
+	        Assert.IsNotNull(op.Result);
+	        Assert.AreEqual(typeof(Sprite), op.Result.GetType());
+	        op.Release();
+        }
+        
         [UnityTest]
         public IEnumerator CanLoadAllSpritesAsArray()
         {
@@ -375,21 +427,22 @@ namespace AddressableAssetsIntegrationTests
 
             Assert.AreEqual(2, loc.Dependencies.Count);
             Assert.AreEqual(catalogHashPath, remoteLocation.ToString());
-            Assert.AreEqual(m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + catalogHashPath), cacheLocation.ToString());
+            Assert.AreEqual(m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + catalogHashPath.GetHashCode() + catalogHashPath.Substring(catalogHashPath.LastIndexOf("."))), cacheLocation.ToString());
         }
 
         [UnityTest]
         public IEnumerator LoadingContentCatalogTwice_DoesNotThrowException_WhenHandleIsntReleased()
         {
             yield return Init();
-            
+
             string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
             Directory.CreateDirectory(kCatalogFolderPath);
             if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
             {
 #if UNITY_EDITOR
-                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>{
-                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new []{"key"})
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
                 }, "test_catalog");
                 File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
 #else
@@ -404,7 +457,7 @@ namespace AddressableAssetsIntegrationTests
                     baseCatalogPath = new Uri(m_Addressables.m_ResourceLocators[0].CatalogLocation.InternalId).AbsolutePath;
                 File.Copy(baseCatalogPath, fullRemotePath);
             }
-            
+
             var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
             yield return op1;
 
@@ -424,14 +477,15 @@ namespace AddressableAssetsIntegrationTests
         public IEnumerator LoadingContentCatalogWithCacheTwice_DoesNotThrowException_WhenHandleIsntReleased()
         {
             yield return Init();
-            
+
             string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
             Directory.CreateDirectory(kCatalogFolderPath);
             if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
             {
 #if UNITY_EDITOR
-                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>{
-                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new []{"key"})
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
                 }, "test_catalog");
                 File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
 #else
@@ -447,7 +501,7 @@ namespace AddressableAssetsIntegrationTests
                 File.Copy(baseCatalogPath, fullRemotePath);
             }
             WriteHashFileForCatalog(fullRemotePath, "123");
-            
+
             var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
             yield return op1;
 
@@ -495,14 +549,15 @@ namespace AddressableAssetsIntegrationTests
         public IEnumerator LoadingContentCatalog_CachesCatalogData_IfValidHashFound()
         {
             yield return Init();
-            
+
             string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
             Directory.CreateDirectory(kCatalogFolderPath);
             if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
             {
 #if UNITY_EDITOR
-                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>{
-                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new []{"key"})
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
                 }, "test_catalog");
                 File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
 #else
@@ -522,7 +577,8 @@ namespace AddressableAssetsIntegrationTests
             var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
             yield return op1;
 
-            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + Path.GetFileName(kCatalogRemotePath));
+            string fullRemoteHashPath = fullRemotePath.Replace(".json", ".hash");
+            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + fullRemoteHashPath.GetHashCode() + fullRemoteHashPath.Substring(fullRemoteHashPath.LastIndexOf(".")));
             string cachedHashPath = cachedDataPath.Replace(".json", ".hash");
             Assert.IsTrue(File.Exists(cachedDataPath));
             Assert.IsTrue(File.Exists(cachedHashPath));
@@ -533,19 +589,94 @@ namespace AddressableAssetsIntegrationTests
             File.Delete(cachedDataPath);
             File.Delete(cachedHashPath);
         }
-        
+
+        [UnityTest]
+        public IEnumerator LoadingContentCatalog_CachesCatalogData_ForTwoCatalogsWithSameName()
+        {
+            yield return Init();
+
+            string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
+            string fullRemotePathTwo = Path.Combine(kCatalogFolderPath, "secondCatalog", kCatalogRemotePath);
+            Directory.CreateDirectory(kCatalogFolderPath);
+            Directory.CreateDirectory(Path.Combine(kCatalogFolderPath, "secondCatalog"));
+            if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
+            {
+#if UNITY_EDITOR
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
+                }, "test_catalog");
+                File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
+                File.WriteAllText(fullRemotePathTwo, JsonUtility.ToJson(data));
+#else
+                UnityEngine.Debug.Log($"Skipping test {nameof(LoadingContentCatalog_CachesCatalogData_IfValidHashFound)} due to missing CatalogLocation.");
+                yield break;
+#endif
+            }
+            else
+            {
+                string baseCatalogPath = m_Addressables.m_ResourceLocators[0].CatalogLocation.InternalId;
+                if (baseCatalogPath.StartsWith("file://"))
+                    baseCatalogPath = new Uri(m_Addressables.m_ResourceLocators[0].CatalogLocation.InternalId).AbsolutePath;
+                File.Copy(baseCatalogPath, fullRemotePath);
+            }
+
+#if UNITY_EDITOR
+            ContentCatalogData catalogData = new ContentCatalogData(new List<ContentCatalogDataEntry>
+            {
+                new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
+            }, "test_catalog");
+            File.WriteAllText(fullRemotePathTwo, JsonUtility.ToJson(catalogData));
+
+            WriteHashFileForCatalog(fullRemotePath, "123");
+            WriteHashFileForCatalog(fullRemotePathTwo, "123");
+#else
+            UnityEngine.Debug.Log($"Skipping test {nameof(LoadingContentCatalog_CachesCatalogData_IfValidHashFound)} due to missing CatalogLocation.");
+            yield break;
+#endif
+
+            var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
+            yield return op1;
+
+            var op2 = m_Addressables.LoadContentCatalogAsync(fullRemotePathTwo, false);
+            yield return op2;
+
+            string fullRemoteHashPath = fullRemotePath.Replace(".json", ".hash");
+            string fullRemoteHashPathTwo = fullRemotePathTwo.Replace(".json", ".hash");
+            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + fullRemoteHashPath.GetHashCode() + fullRemoteHashPath.Substring(fullRemoteHashPath.LastIndexOf(".")));
+            string cachedDataPathTwo = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + fullRemoteHashPathTwo.GetHashCode() + fullRemoteHashPathTwo.Substring(fullRemoteHashPathTwo.LastIndexOf(".")));
+            string cachedHashPath = cachedDataPath.Replace(".json", ".hash");
+            string cachedHashPathTwo = cachedDataPathTwo.Replace(".json", ".hash");
+            Assert.IsTrue(File.Exists(cachedDataPath));
+            Assert.IsTrue(File.Exists(cachedDataPathTwo));
+            Assert.IsTrue(File.Exists(cachedHashPath));
+            Assert.IsTrue(File.Exists(cachedHashPathTwo));
+            Assert.AreEqual("123", File.ReadAllText(cachedHashPath));
+            Assert.AreEqual("123", File.ReadAllText(cachedHashPathTwo));
+
+            m_Addressables.Release(op1);
+            m_Addressables.Release(op2);
+            Directory.Delete(kCatalogFolderPath, true);
+            File.Delete(cachedDataPath);
+            File.Delete(cachedHashPath);
+            File.Delete(cachedDataPathTwo);
+            File.Delete(cachedHashPathTwo);
+        }
+
         [UnityTest]
         public IEnumerator LoadingContentCatalog_IfNoCachedHashFound_Succeeds()
         {
             yield return Init();
-            
+
+            ResourceManager.ExceptionHandler = m_PrevHandler;
             string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
             Directory.CreateDirectory(kCatalogFolderPath);
             if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
             {
 #if UNITY_EDITOR
-                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>{
-                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new []{"key"})
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
                 }, "test_catalog");
                 File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
 #else
@@ -561,7 +692,7 @@ namespace AddressableAssetsIntegrationTests
                 File.Copy(baseCatalogPath, fullRemotePath);
             }
             WriteHashFileForCatalog(fullRemotePath, "123");
-            
+
             string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + Path.GetFileName(kCatalogRemotePath));
             string cachedHashPath = cachedDataPath.Replace(".json", ".hash");
             if (File.Exists(cachedDataPath))
@@ -570,11 +701,61 @@ namespace AddressableAssetsIntegrationTests
                 File.Delete(cachedHashPath);
             var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
             yield return op1;
-            
+
             Assert.IsTrue(op1.IsValid());
             Assert.AreEqual(AsyncOperationStatus.Succeeded, op1.Status);
             Assert.NotNull(op1.Result);
-            
+
+            // Cleanup
+            Addressables.Release(op1);
+            Directory.Delete(kCatalogFolderPath, true);
+            File.Delete(cachedDataPath);
+            File.Delete(cachedHashPath);
+        }
+
+        [UnityTest]
+        public IEnumerator LoadingContentCatalog_IfNoHashFileForCatalog_DoesntThrowException()
+        {
+            yield return Init();
+
+            ResourceManager.ExceptionHandler = m_PrevHandler;
+            string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
+            Directory.CreateDirectory(kCatalogFolderPath);
+            if (m_Addressables.m_ResourceLocators[0].CatalogLocation == null)
+            {
+#if UNITY_EDITOR
+                ContentCatalogData data = new ContentCatalogData(new List<ContentCatalogDataEntry>
+                {
+                    new ContentCatalogDataEntry(typeof(string), "testString", "test.provider", new[] {"key"})
+                }, "test_catalog");
+                File.WriteAllText(fullRemotePath, JsonUtility.ToJson(data));
+#else
+                UnityEngine.Debug.Log($"Skipping test {nameof(LoadingContentCatalog_IfNoCachedHashFound_Succeeds)} due to missing CatalogLocation.");
+                yield break;
+#endif
+            }
+            else
+            {
+                string baseCatalogPath = m_Addressables.m_ResourceLocators[0].CatalogLocation.InternalId;
+                if (baseCatalogPath.StartsWith("file://"))
+                    baseCatalogPath = new Uri(m_Addressables.m_ResourceLocators[0].CatalogLocation.InternalId).AbsolutePath;
+                File.Copy(baseCatalogPath, fullRemotePath);
+            }
+
+            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + Path.GetFileName(kCatalogRemotePath));
+            string cachedHashPath = cachedDataPath.Replace(".json", ".hash");
+            if (File.Exists(cachedDataPath))
+                File.Delete(cachedDataPath);
+            if (File.Exists(cachedHashPath))
+                File.Delete(cachedHashPath);
+            var op1 = m_Addressables.LoadContentCatalogAsync(fullRemotePath, false);
+            yield return op1;
+
+            Assert.IsTrue(op1.IsValid());
+            Assert.AreEqual(AsyncOperationStatus.Succeeded, op1.Status);
+            Assert.NotNull(op1.Result);
+            Assert.IsFalse(File.Exists(cachedHashPath));
+
             // Cleanup
             Addressables.Release(op1);
             Directory.Delete(kCatalogFolderPath, true);
@@ -616,7 +797,8 @@ namespace AddressableAssetsIntegrationTests
 
             Directory.CreateDirectory(kCatalogFolderPath);
             string fullRemotePath = Path.Combine(kCatalogFolderPath, kCatalogRemotePath);
-            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + Path.GetFileName(kCatalogRemotePath));
+            string fullRemoteHashPath = fullRemotePath.Replace(".json", ".hash");
+            string cachedDataPath = m_Addressables.ResolveInternalId(AddressablesImpl.kCacheDataFolder + fullRemoteHashPath.GetHashCode() + fullRemoteHashPath.Substring(fullRemoteHashPath.LastIndexOf(".")));
             string cachedHashPath = cachedDataPath.Replace(".json", ".hash");
             string remoteHashPath = WriteHashFileForCatalog(fullRemotePath, "123");
 
@@ -1330,6 +1512,23 @@ namespace AddressableAssetsIntegrationTests
             var gop = m_Addressables.LoadAssetsAsync<GameObject>(label, x => { ops.Add(x); }, true);
             yield return gop;
             Assert.AreEqual(AddressablesTestUtility.kPrefabCount, ops.Count);
+            for (int i = 0; i < ops.Count; i++)
+                Assert.IsTrue(ops.Contains(gop.Result[i]));
+            gop.Release();
+        }
+        
+        [UnityTest]
+        public IEnumerator LoadAssets_InvokesCallbackPerAssetBeforeCompletedCallback()
+        {
+            yield return Init();
+            string label = AddressablesTestUtility.GetPrefabLabel("BASE");
+            HashSet<GameObject> ops = new HashSet<GameObject>();
+            int opsCompletedOnCompleted = 0;
+            var gop = m_Addressables.LoadAssetsAsync<GameObject>(label, x => { ops.Add(x); }, true);
+            gop.Completed += handle => { opsCompletedOnCompleted = ops.Count; };
+            yield return gop;
+            Assert.AreEqual(AddressablesTestUtility.kPrefabCount, ops.Count);
+            Assert.AreEqual(AddressablesTestUtility.kPrefabCount, opsCompletedOnCompleted);
             for (int i = 0; i < ops.Count; i++)
                 Assert.IsTrue(ops.Contains(gop.Result[i]));
             gop.Release();
@@ -2152,7 +2351,9 @@ namespace AddressableAssetsIntegrationTests
             //Test
             Assert.AreEqual(size, abro.ComputeSize(location, m_Addressables.ResourceManager));
             CreateFakeCachedBundle(bundleName, hash.ToString());
-            Assert.AreEqual(0, abro.ComputeSize(location, m_Addressables.ResourceManager));
+
+            // No hash, so the bundle should be downloaded
+            Assert.AreEqual(size, abro.ComputeSize(location, m_Addressables.ResourceManager));
 
             //Cleanup
             Caching.ClearAllCachedVersions(bundleName);
@@ -2160,6 +2361,135 @@ namespace AddressableAssetsIntegrationTests
             Assert.Ignore("Caching not enabled.");
             yield return null;
 #endif
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_False_ClearDependencyCache_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync("NotARealKey", false);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsTrue(clearCache.IsValid());
+            m_Addressables.Release(clearCache);
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_True_ClearDependencyCache_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync("NotARealKey", true);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_False_ClearDependencyCacheList_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync(new List<object> { "NotARealKey" }, false);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsTrue(clearCache.IsValid());
+            m_Addressables.Release(clearCache);
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_True_ClearDependencyCacheList_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync(new List<object> { "NotARealKey" }, true);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        public IEnumerator Autorelease_False_ClearDependencyCacheObject_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync((object)"NotARealKey", false);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsTrue(clearCache.IsValid());
+            m_Addressables.Release(clearCache);
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_True_ClearDependencyCacheObject_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            var clearCache = m_Addressables.ClearDependencyCacheAsync((object)"NotARealKey", true);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_False_ClearDependencyCacheListIResourceLocs_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            List<IResourceLocation> locations = new List<IResourceLocation>()
+            {
+                new ResourceLocationBase("NotARealKey", "NotARealKey", typeof(BundledAssetProvider).FullName,
+                    typeof(ResourceLocationBase))
+            };
+            var clearCache = m_Addressables.ClearDependencyCacheAsync(locations, false);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsTrue(clearCache.IsValid());
+            m_Addressables.Release(clearCache);
+            Assert.IsFalse(clearCache.IsValid());
+        }
+
+        [UnityTest]
+        public IEnumerator Autorelease_True_ClearDependencyCacheListIResourceLocs_WithChainOperation_DoesNotThrowInvalidHandleError()
+        {
+            yield return Init();
+            //This is to make sure we use the ShouldChainRequest
+            var dumbUpdate = new DumbUpdateOperation();
+            m_Addressables.m_ActiveUpdateOperation = new AsyncOperationHandle<List<IResourceLocator>>(dumbUpdate);
+
+            List<IResourceLocation> locations = new List<IResourceLocation>()
+            {
+                new ResourceLocationBase("NotARealKey", "NotARealKey", typeof(BundledAssetProvider).FullName,
+                    typeof(ResourceLocationBase))
+            };
+            var clearCache = m_Addressables.ClearDependencyCacheAsync(locations, true);
+            dumbUpdate.CallComplete();
+            yield return clearCache;
+            Assert.IsFalse(clearCache.IsValid());
         }
 
         [UnityTest]

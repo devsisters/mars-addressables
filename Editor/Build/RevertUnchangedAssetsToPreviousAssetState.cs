@@ -19,7 +19,7 @@ using static UnityEditor.AddressableAssets.Build.ContentUpdateScript;
 /// RevertUnchangedAssetsToPreviousAssetState uses the asset state from the previous build to determine if any assets
 /// need to use their previous settings or use the newly build data.
 /// </summary>
-internal class RevertUnchangedAssetsToPreviousAssetState
+public class RevertUnchangedAssetsToPreviousAssetState
 {
     internal struct AssetEntryRevertOperation
     {
@@ -30,7 +30,13 @@ internal class RevertUnchangedAssetsToPreviousAssetState
         public string PreviousBuildPath;
     }
 
-    internal static ReturnCode Run(IAddressableAssetsBuildContext aaBuildContext, ContentUpdateContext updateContext)
+    /// <summary>
+    /// Reverts asset entries to their previous state if not modified by the new build. 
+    /// </summary>
+    /// <param name="aaBuildContext">The new build data.</param>
+    /// <param name="updateContext">The cached build data.</param>
+    /// <returns>Returns the success ReturnCode if the content update succeeds.</returns>
+    public static ReturnCode Run(IAddressableAssetsBuildContext aaBuildContext, ContentUpdateContext updateContext)
     {
         var aaContext = aaBuildContext as AddressableAssetsBuildContext;
         var groups = aaContext.Settings.groups.Where(group => group != null && group.HasSchema<BundledAssetGroupSchema>());
@@ -105,10 +111,8 @@ internal class RevertUnchangedAssetsToPreviousAssetState
             {
                 //Logging this as a warning because users may choose to delete their bundles on disk which will trigger this state.
                 Addressables.LogWarning($"CachedAssetState found for {entry.AssetPath} but the previous bundle at {previousBundlePath} cannot be found. " +
-                    $"The modified assets will not be able to use the previously built bundle which will result in new bundles being created " +
-                    $"for these static content groups.  This will point the Content Catalog to local bundles that do not exist on currently " +
-                    $"deployed versions of an application.");
-                continue;
+                    $"This will not affect loading the bundle in previously built players, but loading the missing bundle in Play Mode using the play mode script " +
+                    $"\"Use Existing Build (requires built groups)\" will fail.");
             }
 
             string builtBundlePath = contentUpdateContext.BundleToInternalBundleIdMap[fullInternalBundleName].Replace(loadPath, buildPath);
@@ -126,6 +130,16 @@ internal class RevertUnchangedAssetsToPreviousAssetState
         }
         return operations;
     }
+    
+    private static bool IsPreviouslyRevertedDependency(string bundleFileId, ContentUpdateContext contentUpdateContext)
+    {
+        foreach(CachedAssetState state in contentUpdateContext.PreviousAssetStateCarryOver)
+        {
+            if (state.bundleFileId == bundleFileId)
+                return true;
+        }
+        return false;
+    }
 
     internal static void ApplyAssetEntryUpdates(
         List<AssetEntryRevertOperation> operations,
@@ -137,9 +151,8 @@ internal class RevertUnchangedAssetsToPreviousAssetState
         {
             //Check that we can replace the entry in the file registry
             //before continuing.  Past this point destructive actions are taken.
-            if (contentUpdateContext.Registry.ReplaceBundleEntry(
-                Path.GetFileNameWithoutExtension(operation.PreviousBuildPath),
-                operation.PreviousAssetState.bundleFileId))
+            if (contentUpdateContext.Registry.ReplaceBundleEntry(Path.GetFileNameWithoutExtension(operation.PreviousBuildPath), operation.PreviousAssetState.bundleFileId) || 
+                IsPreviouslyRevertedDependency(operation.PreviousAssetState.bundleFileId, contentUpdateContext))
             {
                 File.Delete(operation.CurrentBuildPath);
                 operation.BundleCatalogEntry.InternalId = operation.PreviousAssetState.bundleFileId;

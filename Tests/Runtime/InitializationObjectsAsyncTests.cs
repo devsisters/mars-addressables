@@ -13,7 +13,6 @@ using UnityEngine.TestTools;
 public abstract class InitializationObjectsAsyncTests : AddressablesTestFixture
 {
     [UnityTest]
-    [Timeout(3000)]
     public IEnumerator InitializationObjects_CompletesWhenNoObjectsPresent()
     {
         if (m_RuntimeSettingsPath.StartsWith("GUID:"))
@@ -34,6 +33,29 @@ public abstract class InitializationObjectsAsyncTests : AddressablesTestFixture
 
         var handle = m_Addressables.ResourceManager.StartOperation(op, rtdOp);
         yield return handle;
+    }
+
+    [Test]
+    public void InitializationObjects_CompletesSyncWhenNoObjectsPresent()
+    {
+        if (m_RuntimeSettingsPath.StartsWith("GUID:"))
+        {
+            Assert.Ignore($"{nameof(InitializationObjects_CompletesWhenNoObjectsPresent)} skipped due to not having a runtime settings asset (Fast mode does not create this).");
+        }
+        InitalizationObjectsOperation op = new InitalizationObjectsOperation();
+        op.Completed += obj =>
+        {
+            Assert.AreEqual(AsyncOperationStatus.Succeeded, obj.Status);
+            Assert.IsTrue(obj.Result);
+        };
+        var runtimeDataLocation = new ResourceLocationBase("RuntimeData", m_RuntimeSettingsPath, typeof(JsonAssetProvider).FullName, typeof(ResourceManagerRuntimeData));
+        var rtdOp = m_Addressables.ResourceManager.ProvideResource<ResourceManagerRuntimeData>(runtimeDataLocation);
+
+        op.Init(rtdOp, m_Addressables);
+
+        var handle = m_Addressables.ResourceManager.StartOperation(op, rtdOp);
+        handle.WaitForCompletion();
+        Assert.IsTrue(handle.IsDone);
     }
 
     [Test]
@@ -63,7 +85,6 @@ public abstract class InitializationObjectsAsyncTests : AddressablesTestFixture
 
 #if UNITY_EDITOR
     [UnityTest]
-    [Timeout(5000)]
     public IEnumerator InitializationObjects_CompletesWhenObjectsPresent()
     {
         if (m_RuntimeSettingsPath.StartsWith("GUID:"))
@@ -92,10 +113,37 @@ public abstract class InitializationObjectsAsyncTests : AddressablesTestFixture
         yield return handle;
     }
 
+    [Test]
+    public void InitializationObjects_CompletesSyncWhenObjectsPresent()
+    {
+        if (m_RuntimeSettingsPath.StartsWith("GUID:"))
+        {
+            Assert.Ignore($"{nameof(InitializationObjects_CompletesWhenObjectsPresent)} skipped due to not having a runtime settings asset (Fast mode does not create this).");
+        }
+        InitalizationObjectsOperation op = new InitalizationObjectsOperation();
+        op.Completed += obj =>
+        {
+            Assert.AreEqual(AsyncOperationStatus.Succeeded, obj.Status);
+            Assert.IsTrue(obj.Result);
+        };
+        var runtimeDataLocation = new ResourceLocationBase("RuntimeData", m_RuntimeSettingsPath, typeof(JsonAssetProvider).FullName, typeof(ResourceManagerRuntimeData));
+        var rtdOp = m_Addressables.ResourceManager.ProvideResource<ResourceManagerRuntimeData>(runtimeDataLocation);
+        rtdOp.Completed += obj =>
+        {
+            ObjectInitializationData opData = ObjectInitializationData.CreateSerializedInitializationData<FakeInitializationObject>("fake", "fake");
+            obj.Result.InitializationObjects.Add(opData);
+        };
+
+        op.Init(rtdOp, m_Addressables);
+
+        var handle = m_Addressables.ResourceManager.StartOperation(op, rtdOp);
+        handle.WaitForCompletion();
+        Assert.IsTrue(handle.IsDone);
+    }
+
 #endif
 
     [UnityTest]
-    [Timeout(3000)]
     public IEnumerator InitializationAsync_HandlesEmptyData()
     {
         if (m_RuntimeSettingsPath.StartsWith("GUID:"))

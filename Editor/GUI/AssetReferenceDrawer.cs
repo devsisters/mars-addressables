@@ -27,11 +27,13 @@ namespace UnityEditor.AddressableAssets.GUI
         internal string m_AssetName;
         internal Rect assetDropDownRect;
         internal const string noAssetString = "None (AddressableAsset)";
+        internal const string forceAddressableString = "Make Addressable - ";
         internal AssetReference m_AssetRefObject;
         internal GUIContent m_label;
         internal bool m_ReferencesSame = true;
         SubassetPopup m_SubassetPopup;
         List<AssetReferenceUIRestrictionSurrogate> m_Restrictions = null;
+        SerializedProperty m_AssetReferenceProperty;
 
 #if UNITY_2019_1_OR_NEWER
         private Texture2D m_CaretTexture = null;
@@ -39,6 +41,14 @@ namespace UnityEditor.AddressableAssets.GUI
 
         internal List<AssetReferenceUIRestrictionSurrogate> Restrictions => m_Restrictions;
 
+        bool ValidateAsset(Object obj)
+        {
+            return m_AssetRefObject != null
+                && m_AssetRefObject.ValidateAsset(obj)
+                && m_Restrictions != null
+                && m_Restrictions.All(r => r.ValidateAsset(obj));
+        }
+        
         /// <summary>
         /// Validates that the referenced asset allowable for this asset reference.
         /// </summary>
@@ -80,10 +90,7 @@ namespace UnityEditor.AddressableAssets.GUI
                 {
                     var atlasEntries = new List<AddressableAssetEntry>();
                     AddressableAssetSettingsDefaultObject.Settings.GetAllAssets(atlasEntries, false, null, e => AssetDatabase.GetMainAssetTypeAtPath(e.AssetPath) == typeof(SpriteAtlas));
-                    var spriteName = target.name;
-                    if (spriteName.EndsWith("(Clone)"))
-                        spriteName = spriteName.Replace("(Clone)", "");
-
+                    var spriteName = FormatName(target.name);
                     foreach (var a in atlasEntries)
                     {
                         var atlas = AssetDatabase.LoadAssetAtPath<SpriteAtlas>(a.AssetPath);
@@ -96,6 +103,12 @@ namespace UnityEditor.AddressableAssets.GUI
                         target = atlas;
                         break;
                     }
+                }
+                
+                if (subObject == null && AssetDatabase.IsSubAsset(target))
+                {
+                    subObject = target;
+                    target = AssetDatabase.LoadAssetAtPath<Object>(AssetDatabase.GetAssetPath(target));
                 }
 
                 guid = SetSingleAsset(property, target, subObject);
@@ -180,6 +193,7 @@ namespace UnityEditor.AddressableAssets.GUI
                 return;
             }
 
+            m_AssetReferenceProperty = property;
             string labelText = label.text;
             m_AssetRefObject = property.GetActualObjectForSerializedProperty<AssetReference>(fieldInfo, ref labelText);
             if (labelText != label.text || string.IsNullOrEmpty(label.text))
@@ -198,6 +212,38 @@ namespace UnityEditor.AddressableAssets.GUI
             string guid = m_AssetRefObject.AssetGUID;
             var aaSettings = AddressableAssetSettingsDefaultObject.Settings;
 
+            var isNotAddressable = ApplySelectionChanges(property, aaSettings, ref guid);
+
+            assetDropDownRect = EditorGUI.PrefixLabel(position, label);
+            var nameToUse = GetNameForAsset(property, isNotAddressable, fieldInfo);
+            if (m_AssetRefObject.editorAsset != null && m_ReferencesSame)
+            {
+                List<Object> subAssets = null;
+                bool hasSubAssets = !string.IsNullOrEmpty(m_AssetRefObject.SubObjectName);
+                if (!hasSubAssets)
+                {
+                    subAssets = GetSubAssetsList();
+                    hasSubAssets = subAssets.Count > 1;
+                }
+
+                if (hasSubAssets)
+                {
+                    assetDropDownRect = DrawSubAssetsControl(property, subAssets);
+                }
+            }
+
+            bool isDragging = Event.current.type == EventType.DragUpdated && position.Contains(Event.current.mousePosition);
+            bool isDropping = Event.current.type == EventType.DragPerform && position.Contains(Event.current.mousePosition);
+
+            DrawControl(property, isDragging, isDropping, nameToUse, isNotAddressable, guid);
+
+            HandleDragAndDrop(property, isDragging, isDropping, guid);
+
+            EditorGUI.EndProperty();
+        }
+
+        bool ApplySelectionChanges(SerializedProperty property, AddressableAssetSettings aaSettings, ref string guid)
+        {
             var checkToForceAddressable = string.Empty;
             if (!string.IsNullOrEmpty(newGuid) && newGuidPropertyPath == property.propertyPath)
             {
@@ -206,7 +252,12 @@ namespace UnityEditor.AddressableAssets.GUI
                     SetObject(property, null, out guid);
                     newGuid = string.Empty;
                 }
-                else
+                else if (newGuid == forceAddressableString)
+                {
+                    checkToForceAddressable = guid;
+                    newGuid = string.Empty;
+                }
+                else if (guid != newGuid)
                 {
                     if (SetObject(property, AssetDatabase.LoadAssetAtPath<Object>(AssetDatabase.GUIDToAssetPath(newGuid)), out guid))
                     {
@@ -256,37 +307,47 @@ namespace UnityEditor.AddressableAssets.GUI
                 }
             }
 
-            assetDropDownRect = EditorGUI.PrefixLabel(position, label);
-            var nameToUse = GetNameForAsset(property, isNotAddressable, fieldInfo);
-            if (m_AssetRefObject.editorAsset != null)
-            {
-                var subAssets = new List<Object>();
-                subAssets.Add(null);
-                var assetPath = AssetDatabase.GUIDToAssetPath(m_AssetRefObject.AssetGUID);
-                subAssets.AddRange(AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath));
-                var mainType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-                if (mainType == typeof(SpriteAtlas))
-                {
-                    var atlas = AssetDatabase.LoadAssetAtPath<SpriteAtlas>(assetPath);
-                    var sprites = new Sprite[atlas.spriteCount];
-                    atlas.GetSprites(sprites);
-                    subAssets.AddRange(sprites);
-                }
+            return isNotAddressable;
+        }
 
-                if (subAssets.Count > 1 && m_ReferencesSame)
-                {
-                    assetDropDownRect = DrawSubAssetsControl(property, subAssets);
-                }
+        internal List<Object> GetSubAssetsList()
+        {
+            var subAssets = new List<Object>();
+            subAssets.Add(null);
+            var assetPath = AssetDatabase.GUIDToAssetPath(m_AssetRefObject.AssetGUID);
+            
+            var repr = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
+            if (repr.Any())
+            {
+                var subtype = m_AssetRefObject.SubOjbectType ?? GetGenericTypeFromAssetReference();
+                if (subtype != null) 
+                    repr = repr.Where(o => subtype.IsInstanceOfType(o)).OrderBy(s => s.name).ToArray();
+            }
+            subAssets.AddRange(repr);
+            
+            var mainType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
+            if (mainType == typeof(SpriteAtlas))
+            {
+                var atlas = AssetDatabase.LoadAssetAtPath<SpriteAtlas>(assetPath);
+                var sprites = new Sprite[atlas.spriteCount];
+                atlas.GetSprites(sprites);
+                subAssets.AddRange(sprites.OrderBy(s => s.name));
             }
 
-            bool isDragging = Event.current.type == EventType.DragUpdated && position.Contains(Event.current.mousePosition);
-            bool isDropping = Event.current.type == EventType.DragPerform && position.Contains(Event.current.mousePosition);
+            return subAssets;
+        }
 
-            DrawControl(property, isDragging, isDropping, nameToUse, isNotAddressable, guid);
+        Type GetGenericTypeFromAssetReference()
+        {
+            var type = m_AssetRefObject?.GetType();
+            while (type != null)
+            {
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(AssetReferenceT<>))
+                    return type.GenericTypeArguments[0];
+                type = type.BaseType;
+            }
 
-            HandleDragAndDrop(property, isDragging, isDropping, guid);
-
-            EditorGUI.EndProperty();
+            return null;
         }
 
         private void DrawControl(SerializedProperty property, bool isDragging, bool isDropping, string nameToUse, bool isNotAddressable, string guid)
@@ -390,6 +451,11 @@ namespace UnityEditor.AddressableAssets.GUI
                                 rejectedDrag = true;
                         }
                     }
+                    else if (DragAndDrop.objectReferences != null && DragAndDrop.objectReferences.Length == 1 && AssetDatabase.IsSubAsset(DragAndDrop.objectReferences[0]))
+                    {
+                        if(!ValidateAsset(DragAndDrop.objectReferences[0]))
+                            rejectedDrag = true;
+                    }
                     else
                     {
                         if (DragAndDrop.paths.Length != 1)
@@ -475,13 +541,9 @@ namespace UnityEditor.AddressableAssets.GUI
             pickerRect.x = objRect.xMax - pickerWidth;
             bool multipleSubassets = false;
 
-            // Get currently selected subasset
-            GetSelectedSubassetIndex(subAssets, out var selIndex, out var objNames);
-
             // Check if targetObjects have multiple different selected
             if (property.serializedObject.targetObjects.Length > 1)
-                multipleSubassets = CheckTargetObjectsSubassetsAreDifferent(property, m_AssetRefObject.SubObjectName);
-
+                multipleSubassets = CheckTargetObjectsSubassetsAreDifferent(property, m_AssetRefObject.SubObjectName, fieldInfo);
 
             bool isPickerPressed = Event.current.type == EventType.MouseDown && Event.current.button == 0 && pickerRect.Contains(Event.current.mousePosition);
             if (isPickerPressed)
@@ -489,7 +551,7 @@ namespace UnityEditor.AddressableAssets.GUI
                 // Do custom popup with scroll to pick subasset
                 if (m_SubassetPopup == null || m_SubassetPopup.m_property != property)
                 {
-                    m_SubassetPopup = new SubassetPopup(selIndex, objNames, subAssets, property, this);
+                    m_SubassetPopup = CreateSubAssetPopup(property, subAssets ?? GetSubAssetsList());
                 }
 
                 PopupWindow.Show(objRect, m_SubassetPopup);
@@ -503,7 +565,7 @@ namespace UnityEditor.AddressableAssets.GUI
             // Show selected name
             GUIContent nameSelected = new GUIContent("--");
             if (!multipleSubassets)
-                nameSelected.text = objNames[selIndex];
+                nameSelected.text = FormatName(m_AssetRefObject.SubObjectName);
             UnityEngine.GUI.Box(objRect, nameSelected, EditorStyles.objectField);
 
 #if UNITY_2019_1_OR_NEWER
@@ -512,55 +574,37 @@ namespace UnityEditor.AddressableAssets.GUI
 #endif
             return assetDropDownRect;
         }
-        
+
         internal void GetSelectedSubassetIndex(List<Object> subAssets, out int selIndex, out string[] objNames)
         {
-            objNames = new string[subAssets.Count];
-            selIndex = 0;
-
-            // Get currently selected subasset
-            for (int i = 0; i < subAssets.Count; i++)
-            {
-                var subAsset = subAssets[i];
-                var objName = subAsset == null ? "<none>" : subAsset.name;
-                if (objName.EndsWith("(Clone)"))
-                    objName = objName.Replace("(Clone)", "");
-                objNames[i] = subAsset == null ? objName : $"{objName}:{subAsset.GetType()}";
-
-                if (subAsset == null)
-                {
-                    selIndex = i;
-                }
-                else if (m_AssetRefObject.SubObjectName == objName)
-                {
-                    if (m_AssetRefObject.SubOjbectType != null)
-                    {
-                        if (subAsset.GetType().AssemblyQualifiedName ==
-                            m_AssetRefObject.SubOjbectType.AssemblyQualifiedName)
-                        {
-                            selIndex = i;
-                        }
-                    }
-                    else
-                    {
-                        selIndex = i;
-                    }
-                }
-            }
+            var subAssetNames = subAssets.Select(sa => sa == null ? "<none>" : $"{FormatName(sa.name)}:{sa.GetType()}").ToList();
+            objNames = subAssetNames.ToArray();
+            
+            selIndex = subAssetNames.IndexOf($"{m_AssetRefObject.SubObjectName}:{m_AssetRefObject.SubOjbectType}");
+            if (selIndex == -1)
+                selIndex = 0;
+        }
+        
+        SubassetPopup CreateSubAssetPopup(SerializedProperty property, List<Object> subAssets)
+        {
+            GetSelectedSubassetIndex(subAssets, out int selIndex, out string[] objNames);
+            return new SubassetPopup(selIndex, objNames, subAssets, property, this);
         }
 
-        private bool CheckTargetObjectsSubassetsAreDifferent(SerializedProperty property, string objName)
+        internal bool CheckTargetObjectsSubassetsAreDifferent(SerializedProperty property, string objName, FieldInfo propertyField)
         {
             foreach (var targetObject in property.serializedObject.targetObjects)
             {
                 var serializeObjectMulti = new SerializedObject(targetObject);
                 var sp = serializeObjectMulti.FindProperty(property.propertyPath);
                 string labelText = m_label.text;
-                var assetRefObject =
-                    sp.GetActualObjectForSerializedProperty<AssetReference>(fieldInfo, ref labelText);
-                if (assetRefObject.SubObjectName != objName)
+                var assetRefObject = sp.GetActualObjectForSerializedProperty<AssetReference>(propertyField, ref labelText);
+                if (assetRefObject != null && assetRefObject.SubObjectName != null)
                 {
-                    return true;
+                    if (assetRefObject.SubObjectName != objName)
+                    {
+                        return true;
+                    }
                 }
             }
 
@@ -573,9 +617,7 @@ namespace UnityEditor.AddressableAssets.GUI
             string spriteName = null;
             if (subAsset != null && subAsset.GetType() == typeof(Sprite))
             {
-                spriteName = subAsset.name;
-                if (spriteName.EndsWith("(Clone)"))
-                    spriteName = spriteName.Replace("(Clone)", "");
+                spriteName = FormatName(subAsset.name);
             }
 
             foreach (var t in property.serializedObject.targetObjects)
@@ -599,15 +641,37 @@ namespace UnityEditor.AddressableAssets.GUI
             return valueChanged;
         }
 
-        static void SetDirty(Object obj)
+        void SetDirty(Object obj)
         {
             UnityEngine.GUI.changed = true; // To support EditorGUI.BeginChangeCheck() / EditorGUI.EndChangeCheck()
 
+            TriggerOnValidate();
             EditorUtility.SetDirty(obj);
             AddressableAssetUtility.OpenAssetIfUsingVCIntegration(obj);
             var comp = obj as Component;
             if (comp != null && comp.gameObject != null && comp.gameObject.activeInHierarchy)
                 EditorSceneManager.MarkSceneDirty(comp.gameObject.scene);
+        }
+
+        /*
+         * The AssetReference class is not a Unity.Object or a base type so a lot of SerializedProperty's
+         * functionalities doesn't work, because type-checking is done in the API to check whether an operation
+         * can be executed or not. In the engine, one of the way changes are detected is when a new value is set
+         * through the class' value setters (see MarkPropertyModified() in SerializedProperty.cpp). So in order to
+         * trigger a change, we modify a sub-property instead.
+         */
+        void TriggerOnValidate()
+        {
+            if (m_AssetReferenceProperty != null)
+            {
+                m_AssetReferenceProperty.serializedObject.ApplyModifiedProperties();
+                m_AssetReferenceProperty.serializedObject.Update();
+
+                // This is actually what triggers the OnValidate() method.
+                // Since 'm_EditorAssetChanged' is of a recognized type and is a sub-property of AssetReference, both
+                // are flagged as changed and OnValidate() is called.
+                m_AssetReferenceProperty.FindPropertyRelative("m_EditorAssetChanged").boolValue = false;
+            }
         }
 
         internal string GetNameForAsset(SerializedProperty property, bool isNotAddressable, FieldInfo propertyField)
@@ -637,6 +701,14 @@ namespace UnityEditor.AddressableAssets.GUI
             return nameToUse;
         }
 
+        string FormatName(string name)
+        {
+            var formatted = string.IsNullOrEmpty(name) ? "<none>" : name;
+            if (formatted.EndsWith("(Clone)"))
+                formatted = formatted.Replace("(Clone)", "");
+            return formatted;
+        }
+        
         internal void GatherFilters(SerializedProperty property)
         {
             if (m_Restrictions != null)
@@ -876,6 +948,8 @@ namespace UnityEditor.AddressableAssets.GUI
                     if (assetRefItem != null && !string.IsNullOrEmpty(assetRefItem.AssetPath))
                     {
                         m_Drawer.newGuid = assetRefItem.Guid;
+                        if (string.IsNullOrEmpty(m_Drawer.newGuid))
+                            m_Drawer.newGuid = assetRefItem.AssetPath;
                     }
                     else
                     {
@@ -919,7 +993,7 @@ namespace UnityEditor.AddressableAssets.GUI
                     if (!string.IsNullOrEmpty(m_NonAddressedAsset))
                     {
                         var item = new AssetRefTreeViewItem(m_NonAddressedAsset.GetHashCode(), 0,
-                            "Make Addressable - " + m_NonAddressedAsset, string.Empty);
+                            AssetReferenceDrawer.forceAddressableString + m_NonAddressedAsset, AssetReferenceDrawer.forceAddressableString);
                         item.icon = m_WarningIcon;
                         root.AddChild(item);
                     }

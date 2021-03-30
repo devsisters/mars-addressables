@@ -17,14 +17,14 @@ To unload the Asset, use the [`Addressables.Release`](xref:UnityEngine.Addressab
 **Note**: The Asset may or may not be unloaded immediately, contingent on existing dependencies. For more information, read the section on [when memory is cleared](#when-is-memory-cleared).
 
 ### Scene loading
-To load a Scene, use [`Addressables.LoadSceneAsync`](xref:UnityEngine.AddressableAssets.AssetReference.LoadSceneAsync(UnityEngine.SceneManagement.LoadSceneMode,System.Boolean,System.Int32)). You can use this method to load a Scene in `Single` mode, which closes all open Scenes, or in `Additive` mode (for more information, see documentation on [Scene mode loading](https://docs.unity3d.com/ScriptReference/SceneManagement.LoadSceneMode.html).  
+To load a Scene, use [`Addressables.LoadSceneAsync`](xref:UnityEngine.AddressableAssets.AssetReference.LoadSceneAsync(UnityEngine.SceneManagement.LoadSceneMode,System.Boolean,System.Int32)). You can use this method to load a Scene in `Single` mode, which closes all open Scenes, or in `Additive` mode (for more information, see documentation on [Scene mode loading](https://docs.unity3d.com/ScriptReference/SceneManagement.LoadSceneMode.html)).  
 
 To unload a Scene, use [`Addressables.UnloadSceneAsync`](xref:UnityEngine.AddressableAssets.Addressables.UnloadSceneAsync(UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle,System.Boolean)), or open a new Scene in `Single` mode. You can open a new Scene by either using the Addressables interface, or using the [`SceneManager.LoadScene`](https://docs.unity3d.com/ScriptReference/SceneManagement.SceneManager.LoadScene.html) or [`SceneManager.LoadSceneAsync`](https://docs.unity3d.com/ScriptReference/SceneManagement.SceneManager.LoadSceneAsync.html) methods. Opening a new Scene closes the current one, properly decrementing the ref-count.
 
 ### GameObject instantiation
 To load and instantiate a GameObject Asset, use [`Addressables.InstantiateAsync`](xref:UnityEngine.AddressableAssets.Addressables.InstantiateAsync(System.Object,UnityEngine.Transform,System.Boolean,System.Boolean)). This instantiates the Prefab located by the specified `location` parameter. The Addressables system will load the Prefab and its dependencies, incrementing the ref-count of all associated Assets. 
 
-Calling [`InstantiateAsync`](xref:UnityEngine.AddressableAssets.Addressables.InstantiateAsync(System.Object,UnityEngine.Transform,System.Boolean,System.Boolean)) three times on the same address results in all dependent assets having a ref-count of three. Unlike calling [`LoadAssetAsync`](xref:UnityEngine.AddressableAssets.Addressables.LoadAssetAsync``1(System.Object)) three times, however, each `InstantiateAsync` call returns an [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle`1) pointing to a unique operation.  This is because the result of each `InstantiateAsync` is a unique instance. You would need to individually release each returned [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle) or GameObject instance. Another distinction between `InstantiateAsync` and other load calls is the optional `trackHandle` parameter. When set to `false`, you must keep the [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle) to use while releasing your instance. This is more efficient, but requires more development effort.
+Calling [`InstantiateAsync`](xref:UnityEngine.AddressableAssets.Addressables.InstantiateAsync(System.Object,UnityEngine.Transform,System.Boolean,System.Boolean)) three times on the same address results in all dependent assets having a ref-count of three. Unlike calling [`LoadAssetAsync`](xref:UnityEngine.AddressableAssets.Addressables.LoadAssetAsync``1(System.Object)) three times, however, each `InstantiateAsync` call returns an [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle`1) pointing to a unique operation.  This is because the result of each `InstantiateAsync` is a unique instance. You will need to individually release each returned [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle) or GameObject instance. Another distinction between `InstantiateAsync` and other load calls is the optional `trackHandle` parameter. When set to `false`, you must keep the [`AsyncOperationHandle`](xref:UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle) to use while releasing your instance. This is more efficient, but requires more development effort.
 
 To destroy an instantiated GameObject, use [`Addressables.ReleaseInstance`](xref:UnityEngine.AddressableAssets.Addressables.ReleaseInstance(UnityEngine.GameObject)), or close the Scene that contains the instantiated object. This Scene can have been loaded (and thus closed) in `Additive` or `Single` mode. This Scene can also have been loaded using either the [`Addressables`](xref:UnityEngine.AddressableAssets.Addressables) or `SceneManagement` API. As noted above, if you set `trackHandle` to `false`, you can only call `Addressables.ReleaseInstance` with the handle, not with the actual GameObject.
 
@@ -77,6 +77,13 @@ An Asset no longer being referenced (indicated by the end of a blue section in t
 
 In this example, the `tree` asset is not actually unloaded at this point. You can load an AssetBundle, or its partial contents, but you cannot partially unload an AssetBundle. No asset in `stuff` unloads until the AssetBundle itself is completely unloaded. The exception to this rule is the engine interface [`Resources.UnloadUnusedAssets`](https://docs.unity3d.com/ScriptReference/Resources.UnloadUnusedAssets.html). Executing this method in the above scenario causes `tree` to unload. Because the Addressables system cannot be aware of these events, the profiler graph only reflects the Addressables ref-counts (not exactly what memory holds). Note that if you choose to use `Resources.UnloadUnusedAssets`, it is a very slow operation, and should only be called on a screen that won't show any hitches (such as a loading screen).
 
+### Delaying Unload
+In addition to ensuring items are cleared from memory quickly enough (as discussed above), it's important to ensure items are not churning in and out of memory too often.  Specifically, loading an item, releasing it, then quickly reloading it. If it is the only item in a bundle, or at least the last released item, then we will unload the AssetBundle the moment the release comes through. This means there will be a full unload, and then an immediate reload. A common example of this is with shared dependencies. 
+
+For example, say you have two materials, `boat` and `plane` that share a texture, `cammo`, which has been pulled into its own AssetBundle. Level 1 uses `boat` and level 2 uses `plane`. As you exit level 1 you release the `boat`, and immediately load `plane`. During the release, we will unload texture `cammo`. Then the subsequent load will immediately reload it.
+
+For this specific example, the easiest solution is to build a wrapper around Addressables that delays Release calls. That works here because it's known "release and reload" are likely to happen in a very short timeframe (level transitions).  Depending on your scenario, the solution may need to be more or less complex. 
+
 ## AssetBundle Memory Overhead
 When deciding how to organize your Addressable groups and AssetBundles, you may want to consider the runtime memory usage of each AssetBundle. Many small AssetBundles can give greater granularity for unloading, but can come at the cost of some runtime memory overhead. This section describes the various types of AssetBundle memory overhead.
 
@@ -90,7 +97,7 @@ When you put objects of the same type in more than one AssetBundle, the type inf
 
 ### AssetBundle Object
 
-The AssetBundle object itself has two main sources of runtime memory overhead: the table of contents, and the preload table. While the size of an AssetBundle on disk is not the same as its size at runtime, you can use the disk size to approximate the memory overhead. This information is located in the [Build Layout Report](DiagnosticTools.md#build-layout-report).
+The AssetBundle object itself has two main sources of runtime memory overhead: the table of contents and the preload table. While the size of an AssetBundle on disk is not the same as its size at runtime, you can use the disk size to approximate the memory overhead. This information is located in the [Build Layout Report](DiagnosticTools.md#build-layout-report).
 
 The table of contents is a map within the bundle that allows you to look up each explicitly included asset by name. It scales linearly with the number of assets and the length of the string names by which they are mapped.
 
@@ -98,7 +105,7 @@ The preload table is a list of all the objects that a loadable asset references.
 
 As an example, consider a situation in which you are adding two Assets to an AssetBundle  (`PrefabA` and `PrefabB`) and both of these prefabs reference a third prefab  (`PrefabC`), which is large and contains several components and references to other assets. This AssetBundle has two preload tables, one for `PrefabA` and one for `PrefabB`. Those tables contain entries for all the objects of their respective prefab, but also entries for all the objects in `PrefabC` and any objects referenced by `PrefabC`. Thus the information required to load `PrefabC` ends up duplicated in both `PrefabA` and `PrefabB`. This will happen whether or not `PrefabC` is explicitly added to an AssetBundle.
 
-Depending on how you organize your assets, the preload tables in AssetBundles could become quite large and contain many duplicate entries. This is especially true if you had several loadable assets that all reference a complex asset, such as `PrefabC` in the situation above. If you determine that the memory overhead from the preload table is a problem, you can structure your loadable assets so that they have fewer complex loading dependencies.
+Depending on how you organize your assets, the preload tables in AssetBundles could become quite large and contain many duplicate entries. This is especially true if you have several loadable assets that all reference a complex asset, such as `PrefabC` in the situation above. If you determine that the memory overhead from the preload table is a problem, you can structure your loadable assets so that they have fewer complex loading dependencies.
 
 ## AssetBundle dependencies	
 Loading an Addressable Asset loads all the AssetBundle dependencies and keeps them loaded until you call [`Addressables.Release`](xref:UnityEngine.AddressableAssets.Addressables.Release``1(``0)) on the handle returned from the loading method.	
@@ -115,35 +122,43 @@ Prior to 1.13.0, the dependency graph was not as thorough as it is now.  In the 
 When exploring memory management and dependency graphs, it's important to discuss duplicated content.  There are two mechanisms by which an asset can be built into an AssetBundle: explicit and implicit. If you mark an asset as Addressable, it is explicitly put into an AssetBundle.  That is the only AssetBundle it is in.  
 
 Example:
-A material has a direct dependency on a texture, and both assets are marked as Addressable in separate AssetBundles `BundleM` and `BundleT` respectively.  `BundleT` contains the texture, `BundleM` contains the material, and lists `BundleT` as a dependency.
+A material has a direct dependency on a texture, and both assets are marked as Addressable in separate AssetBundles `BundleM` and `BundleT` respectively.  `BundleT` contains the texture. `BundleM` contains the material and lists `BundleT` as a dependency.
 
 If any dependencies are not explicitly included, then they are implicitly pulled in.
+
 Example:
 A material has a direct dependency on a texture, and only the material is marked as Addressable in `BundleM`.  During build, the texture, because it is not explicitly included elsewhere, is pulled into `BundleM` when the material is.  
 
 This implicit dependency inclusion can lead to duplication.
-Example
+
+Example:
 Two materials, matA and matB, are Addressable and both have direct dependencies on the same texture.  If matA and matB are built into the same AssetBundle, then the texture is pulled implicitly in once.  If matA and matB are built into separate AssetBundles, then the texture is pulled implicitly into each of those AssetBundles.  At runtime, the engine has no record that these textures came from the same source asset, and are each loaded as they are needed by their respective materials. 
 
 ### SpriteAtlas dependencies
 SpriteAtlases complicate the dependency calculation a bit, and merit a more thorough set of examples.
 
 Addressable Sprite Example 1:
-Three textures exist and are marked as Addressable in three separate groups.  Each texture builds to about 500KB.  During the build, they are built into three spearate AssetBundles, each AssetBundle only containing the given sprite meta data and texture.  Each AssetBundle is be about 500KB and none of these AssetBundles have dependencies.  
+
+Three textures exist and are marked as Addressable in three separate groups.  Each texture builds to about 500KB.  During the build, they are built into three separate AssetBundles, each AssetBundle only containing the given sprite meta data and texture.  Each AssetBundle is about 500KB and none of these AssetBundles have dependencies.  
 
 Addressable Sprite Example 2:
+
 The three textures in Example 1 are put into a SpriteAtlas.  That atlas is not Addressable.  One of the AssetBundles generated contains that atlas texture and is about 1500KB.  The other two AssetBundles only contain Sprite metadata (a few KB), and list the atlas AssetBundle as a dependency.  Which AssetBundle contains the texture is deterministic in that it is the same through rebuilds, but is not something that can be set by the user.  This is the key portion that goes against the standard duplication of dependencies.  The sprites are dependent on the SpriteAtlas texture to load, and yet that texture is not built into all three AssetBundles, but is instead built only into one.
 
 Addressable Sprite Example 3:
-The SpriteAtlas from Example 2 is marked as Addressable in its own AssetBundle.  At this point there are four AssetBundles created.  If you are using a 2020.x or newer version of Unity, this builds as you would expect.  The three AssetBundles with the sprites are each be only a few KB and have a dependency on this fourth SpriteAtlas AssetBundle, which is be about 1500KB.  If you are using 2019.x or older, the texture itself may end up elsewhere.  The three sprite AssetBundles still depend on the SpriteAtlas AssetBundle. However, the SpriteAtlas AssetBundle may only contain meta data, and the texture may be with one of the other sprites.
+
+The SpriteAtlas from Example 2 is marked as Addressable in its own AssetBundle.  At this point there are four AssetBundles created.  If you are using a 2020.x or newer version of Unity, this builds as you would expect.  The three AssetBundles with the sprites are each only a few KB and have a dependency on this fourth SpriteAtlas AssetBundle, which is be about 1500KB.  If you are using 2019.x or older, the texture itself may end up elsewhere.  The three sprite AssetBundles still depend on the SpriteAtlas AssetBundle. However, the SpriteAtlas AssetBundle may only contain meta data, and the texture may be in one of the other sprite AssetBundles.
 
 Addressable Prefab With Sprite Dependency Example 1:
-Instead of three Addressable textures, there are three Addressable sprite prefabs. Each prefab depends on its own sprite (about 500KB). Building the three prefabs seperately results, as expected, in three AssetBundles of about 500KB each.
+
+Instead of three Addressable textures, there are three Addressable sprite prefabs. Each prefab depends on its own sprite (about 500KB). Building the three prefabs separately results, as expected, in three AssetBundles of about 500KB each.
 
 Addressable Prefab With Sprite Dependency Example 2
+
 Taking the prefabs and textures from the previous example, all three textures are added to a SpriteAtlas, and that atlas is not marked as Addressable.  In this scenario, the SpriteAtlas texture is duplicated.  All three AssetBundles are approximately 1500KB. This is expected based on the general rules about duplication of dependencies, but goes against the behavior seen in "Addressable Sprite Example 2".
 
-Addressable Prefab With Sprite Dependency Example 2
+Addressable Prefab With Sprite Dependency Example 3
+
 Taking the prefabs, textures, and SpriteAtlas form the above example, the SpriteAtlas is also marked as Addressable.  Conforming to the rules of explicit inclusion, the SpriteAtlas texture is included only in the AssetBundle containing the SpriteAtlas.  The AssetBundles with prefabs reference this fourth AssetBundle as a dependency.
 
 

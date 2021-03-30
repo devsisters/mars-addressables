@@ -29,7 +29,21 @@ namespace UnityEditor.AddressableAssets.GUI
 
         SearchField m_SearchField;
         const int k_SearchHeight = 20;
-        internal AddressableAssetSettings settings { get { return AddressableAssetSettingsDefaultObject.Settings; } }
+
+        AddressableAssetSettings m_Settings;
+        internal AddressableAssetSettings settings
+        {
+            get
+            {
+                if (m_Settings == null)
+                {
+                    m_Settings = AddressableAssetSettingsDefaultObject.Settings;
+                }
+
+                return m_Settings;
+            }
+            set => m_Settings = value;
+        }
 
         bool m_ResizingVerticalSplitter;
         Rect m_VerticalSplitterRect = new Rect(0, 0, 10, k_SplitterWidth);
@@ -145,7 +159,7 @@ namespace UnityEditor.AddressableAssets.GUI
                         menu.AddItem(new GUIContent("Hosting Services"), false, () => EditorWindow.GetWindow<HostingServicesWindow>().Show(settings));
                         menu.AddItem(new GUIContent("Event Viewer"), false, ResourceProfilerWindow.ShowWindow);
                         menu.AddItem(new GUIContent("Check for Content Update Restrictions"), false, OnPrepareUpdate);
-                        menu.AddItem(new GUIContent("Show Sprite and Subobject Addresses"), ProjectConfigData.showSubObjectsInGroupView, () => { ProjectConfigData.showSubObjectsInGroupView = !ProjectConfigData.showSubObjectsInGroupView; m_EntryTree.Reload(); });
+                        menu.AddItem(new GUIContent("Show Sprite and Subobject Addresses"), ProjectConfigData.ShowSubObjectsInGroupView, () => { ProjectConfigData.ShowSubObjectsInGroupView = !ProjectConfigData.ShowSubObjectsInGroupView; m_EntryTree.Reload(); });
 
                         var bundleList = AssetDatabase.GetAllAssetBundleNames();
                         if (bundleList != null && bundleList.Length > 0)
@@ -217,24 +231,16 @@ namespace UnityEditor.AddressableAssets.GUI
                 if (Event.current.type == EventType.MouseDown && popupPosition.Contains(Event.current.mousePosition))
                 {
                     var menu = new GenericMenu();
-                    menu.AddItem(new GUIContent("Hierarchical Search"), ProjectConfigData.hierarchicalSearch, OnHierSearchClick);
+                    menu.AddItem(new GUIContent("Hierarchical Search"), ProjectConfigData.HierarchicalSearch, OnHierSearchClick);
                     menu.DropDown(popupPosition);
                 }
                 else
                 {
-                    var baseSearch = ProjectConfigData.hierarchicalSearch ? m_EntryTree.customSearchString : m_EntryTree.searchString;
+                    var baseSearch = ProjectConfigData.HierarchicalSearch ? m_EntryTree.customSearchString : m_EntryTree.searchString;
                     var searchString = m_SearchField.OnGUI(searchRect, baseSearch, m_SearchStyles[0], m_SearchStyles[1], m_SearchStyles[2]);
                     if (baseSearch != searchString)
                     {
-                        if (ProjectConfigData.hierarchicalSearch)
-                        {
-                            m_EntryTree.customSearchString = searchString;
-                            Reload();
-                        }
-                        else
-                        {
-                            m_EntryTree.searchString = searchString;
-                        }
+                        m_EntryTree?.Search(searchString);
                     }
                 }
             }
@@ -299,7 +305,7 @@ namespace UnityEditor.AddressableAssets.GUI
 
         void OnHierSearchClick()
         {
-            ProjectConfigData.hierarchicalSearch = !ProjectConfigData.hierarchicalSearch;
+            ProjectConfigData.HierarchicalSearch = !ProjectConfigData.HierarchicalSearch;
             m_EntryTree.SwapSearchType();
             m_EntryTree.Reload();
             m_EntryTree.Repaint();
@@ -367,8 +373,8 @@ namespace UnityEditor.AddressableAssets.GUI
         {
             if (settings == null)
                 return false;
-				
-			if (!m_ModificationRegistered)
+
+            if (!m_ModificationRegistered)
             {
                 m_ModificationRegistered = true;
                 settings.OnModification -= OnSettingsModification; //just in case...
